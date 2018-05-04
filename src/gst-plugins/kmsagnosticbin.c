@@ -735,7 +735,7 @@ kms_agnostic_bin2_link_pad (KmsAgnosticBin2 * self, GstPad * pad, GstPad * peer)
       kms_utils_drop_until_keyframe (pad, TRUE);
     }
     kms_agnostic_bin2_link_to_tee (self, pad, tee, caps);
-    g_timeout_add_seconds (2, kms_utils_force_keyframe, pad);
+    g_timeout_add_seconds (5, kms_utils_force_keyframe, pad);
   }
 
   gst_caps_unref (caps);
