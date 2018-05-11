@@ -81,6 +81,10 @@ G_DEFINE_TYPE_WITH_CODE (KmsBaseRtpEndpoint, kms_base_rtp_endpoint,
 
 #define PICTURE_ID_15_BIT 2
 
+#define DEFAULT_STUN_SERVER_IP NULL
+#define DEFAULT_STUN_SERVER_PORT 3478
+#define DEFAULT_STUN_TURN_URL NULL
+
 #define index_of(str,chr) ({  \
   gint __pos;                 \
   gchar *__c;                 \
@@ -283,6 +287,9 @@ enum
   PROP_REMB_PARAMS,
   PROP_MIN_PORT,
   PROP_MAX_PORT,
+  PROP_STUN_SERVER_IP,
+  PROP_STUN_SERVER_PORT,
+  PROP_TURN_URL,                /* user:password@address:port?transport=[udp|tcp|tls] */
   PROP_SUPPORT_FEC,
   PROP_LAST
 };
@@ -2375,6 +2382,17 @@ kms_base_rtp_endpoint_set_property (GObject * object, guint property_id,
       self->priv->max_port = v;
       break;
     }
+    case PROP_STUN_SERVER_IP:
+      g_free (self->stun_server_ip);
+      self->stun_server_ip = g_value_dup_string (value);
+      break;
+    case PROP_STUN_SERVER_PORT:
+      self->stun_server_port = g_value_get_uint (value);
+      break;
+    case PROP_TURN_URL:
+      g_free (self->turn_url);
+      self->turn_url = g_value_dup_string (value);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
       break;
@@ -2434,6 +2452,15 @@ kms_base_rtp_endpoint_get_property (GObject * object, guint property_id,
       break;
     case PROP_MAX_PORT:
       g_value_set_uint (value, self->priv->max_port);
+      break;
+    case PROP_STUN_SERVER_IP:
+      g_value_set_string (value, self->stun_server_ip);
+      break;
+    case PROP_STUN_SERVER_PORT:
+      g_value_set_uint (value, self->stun_server_port);
+      break;
+    case PROP_TURN_URL:
+      g_value_set_string (value, self->turn_url);
       break;
     case PROP_SUPPORT_FEC:
       g_value_set_boolean (value, self->priv->support_fec);
@@ -2531,6 +2558,9 @@ kms_base_rtp_endpoint_finalize (GObject * gobject)
 
   g_clear_object (&self->priv->sync_audio);
   g_clear_object (&self->priv->sync_video);
+
+  g_free (self->stun_server_ip);
+  g_free (self->turn_url);
 
   G_OBJECT_CLASS (kms_base_rtp_endpoint_parent_class)->finalize (gobject);
 }
@@ -2882,6 +2912,27 @@ kms_base_rtp_endpoint_class_init (KmsBaseRtpEndpointClass * klass)
           "Maximum port number to be used",
           0, G_MAXUINT16, DEFAULT_MAX_PORT,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+  g_object_class_install_property (object_class, PROP_STUN_SERVER_IP,
+      g_param_spec_string ("stun-server",
+          "StunServer",
+          "Stun Server IP Address",
+          DEFAULT_STUN_SERVER_IP, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+  g_object_class_install_property (object_class, PROP_STUN_SERVER_PORT,
+      g_param_spec_uint ("stun-server-port",
+          "StunServerPort",
+          "Stun Server Port",
+          1, G_MAXUINT16, DEFAULT_STUN_SERVER_PORT,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+  g_object_class_install_property (object_class, PROP_TURN_URL,
+      g_param_spec_string ("turn-url",
+          "TurnUrl",
+          "TURN server URL with this format: 'user:password@address:port(?transport=[udp|tcp|tls])'."
+          "'address' must be an IP (not a domain)."
+          "'transport' is optional (UDP by default).",
+          DEFAULT_STUN_TURN_URL, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   g_object_class_install_property (object_class, PROP_SUPPORT_FEC,
       g_param_spec_boolean ("support-fec", "Forward error correction supported",
@@ -3314,6 +3365,10 @@ kms_base_rtp_endpoint_init (KmsBaseRtpEndpoint * self)
   self->priv->min_video_recv_bw = MIN_VIDEO_RECV_BW_DEFAULT;
   self->priv->min_video_send_bw = MIN_VIDEO_SEND_BW_DEFAULT;
   self->priv->max_video_send_bw = MAX_VIDEO_SEND_BW_DEFAULT;
+
+  self->stun_server_ip = DEFAULT_STUN_SERVER_IP;
+  self->stun_server_port = DEFAULT_STUN_SERVER_PORT;
+  self->turn_url = DEFAULT_STUN_TURN_URL;
 
   self->priv->rtpbin = gst_element_factory_make ("rtpbin", NULL);
 

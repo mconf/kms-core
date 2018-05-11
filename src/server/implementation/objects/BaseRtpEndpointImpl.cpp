@@ -53,12 +53,24 @@ GST_DEBUG_CATEGORY_STATIC (GST_CAT_DEFAULT);
 #define PROP_MIN_PORT "min-port"
 #define PROP_MAX_PORT "max-port"
 
+#define PARAM_STUN_SERVER "stunServerAddress"
+#define PARAM_STUN_SERVER_PORT "stunServerPort"
+#define PARAM_TURN_URL "turnURL"
+
+#define PROP_STUN_SERVER "stun-server"
+#define PROP_STUN_SERVER_PORT "stun-server-port"
+#define PROP_TURN_URL "turn-url"
+
+
 /* Fixed point conversion macros */
 #define FRIC        65536.                  /* 2^16 as a double */
 #define FP2D(r)     ((double)(r) / FRIC)
 
 namespace kurento
 {
+
+static const uint DEFAULT_STUN_PORT = 3478;
+
 void BaseRtpEndpointImpl::postConstructor ()
 {
   SdpEndpointImpl::postConstructor ();
@@ -94,6 +106,10 @@ BaseRtpEndpointImpl::BaseRtpEndpointImpl (const boost::property_tree::ptree
                        (ConnectionState::DISCONNECTED);
   connStateChangedHandlerId = 0;
 
+  uint stunPort;
+  std::string stunAddress;
+  std::string turnURL;
+
   try {
     guint minPort = getConfigValue<guint, BaseRtpEndpoint> (PARAM_MIN_PORT);
 
@@ -108,6 +124,50 @@ BaseRtpEndpointImpl::BaseRtpEndpointImpl (const boost::property_tree::ptree
     g_object_set (getGstreamerElement (), PROP_MAX_PORT, maxPort, NULL);
   } catch (boost::property_tree::ptree_bad_path &e) {
     /* Expected when configuration is not set */
+  }
+
+  try {
+    stunPort = getConfigValue <uint, BaseRtpEndpoint> (PARAM_STUN_SERVER_PORT);
+  } catch (std::exception &) {
+    GST_INFO ("STUN server Port not found in config;"
+              " using default value: %d", DEFAULT_STUN_PORT);
+    stunPort = DEFAULT_STUN_PORT;
+  }
+
+  if (stunPort != 0) {
+    try {
+      stunAddress = getConfigValue
+                    <std::string, BaseRtpEndpoint> (PARAM_STUN_SERVER);
+    } catch (boost::property_tree::ptree_error &) {
+      GST_INFO ("STUN server IP address not found in config;"
+                " NAT traversal requires either STUN or TURN server");
+    }
+
+    if (!stunAddress.empty()) {
+      GST_INFO ("Using STUN reflexive server IP: %s", stunAddress.c_str());
+      GST_INFO ("Using STUN reflexive server Port: %d", stunPort);
+
+      g_object_set (G_OBJECT (element), PROP_STUN_SERVER_PORT, stunPort, NULL);
+      g_object_set (G_OBJECT (element), PROP_STUN_SERVER, stunAddress.c_str(), NULL);
+    }
+  }
+
+  try {
+    turnURL = getConfigValue <std::string, BaseRtpEndpoint> (PARAM_TURN_URL);
+
+    std::string safeURL = "<user:password>";
+    size_t separatorPos = turnURL.find_last_of('@');
+    if (separatorPos == std::string::npos) {
+      safeURL.append("@").append(turnURL);
+    } else {
+      safeURL.append(turnURL.substr(separatorPos));
+    }
+    GST_INFO ("Using TURN relay server: %s", safeURL.c_str());
+
+    g_object_set (G_OBJECT (element), PROP_TURN_URL, turnURL.c_str(), NULL);
+  } catch (boost::property_tree::ptree_error &) {
+    GST_INFO ("TURN server IP address not found in config;"
+              " NAT traversal requires either STUN or TURN server");
   }
 }
 

@@ -52,6 +52,11 @@ struct _KmsBaseRtpEndpoint
   KmsBaseSdpEndpoint parent;
 
   KmsBaseRtpEndpointPrivate *priv;
+
+  /* STUN/TURN config */
+  gchar *stun_server_ip;
+  guint stun_server_port;
+  gchar *turn_url;
 };
 
 struct _KmsBaseRtpEndpointClass
