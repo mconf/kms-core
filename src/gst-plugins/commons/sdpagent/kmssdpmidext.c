@@ -95,6 +95,21 @@ kms_sdp_mid_ext_add_offer_attributes (KmsISdpMediaExtension * ext,
 
   return TRUE;
 }
+static void
+kms_sdp_rtcp_ext_add_answer_attributes(const GstSDPMedia * offer, GstSDPMedia * answer)
+{
+  gchar *rtcp;
+  const gchar *RTCP_ATTR = "rtcp-fb";
+  int i = 0;
+
+  do {
+    rtcp = (gchar* )gst_sdp_media_get_attribute_val_n (offer, RTCP_ATTR, i);
+
+    if (rtcp != NULL)
+      gst_sdp_media_add_attribute (answer, RTCP_ATTR, rtcp);
+    i++;
+  } while(rtcp != NULL);
+}
 
 static gboolean
 kms_sdp_mid_ext_add_answer_attributes (KmsISdpMediaExtension * ext,
@@ -105,6 +120,9 @@ kms_sdp_mid_ext_add_answer_attributes (KmsISdpMediaExtension * ext,
   gboolean ret = FALSE;
 
   mid = gst_sdp_media_get_attribute_val (answer, MID_ATTR);
+
+  kms_sdp_rtcp_ext_add_answer_attributes(offer, answer);
+
   if (mid != NULL) {
     /* do not add more mid attributes */
     GST_DEBUG_OBJECT (ext, "Mid has already set in answer");
@@ -112,6 +130,7 @@ kms_sdp_mid_ext_add_answer_attributes (KmsISdpMediaExtension * ext,
   }
 
   mid = gst_sdp_media_get_attribute_val (offer, MID_ATTR);
+
   if (mid == NULL) {
     GST_WARNING_OBJECT (ext, "Remote agent does not support groups");
     return TRUE;
