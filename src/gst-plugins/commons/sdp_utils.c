@@ -604,8 +604,15 @@ sdp_utils_rtcp_fb_attr_check_type (const gchar * attr,
 {
   gchar *aux;
   gboolean ret;
+  /*
+    If the rtcp_fb is like "* ccm fir"
+    then just ignore the payload
+  */
+  if (attr[0] == '*')
+    aux = g_strconcat("*", " ", type, NULL);
+  else
+    aux = g_strconcat (pt, " ", type, NULL);
 
-  aux = g_strconcat (pt, " ", type, NULL);
   ret = g_strcmp0 (attr, aux) == 0;
   g_free (aux);
 
