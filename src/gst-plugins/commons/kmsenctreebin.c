@@ -164,7 +164,7 @@ configure_encoder (GstElement * encoder, EncoderType type, gint target_bitrate,
                     "speed-preset", /* veryfast */ 2,
                     "threads", (guint) 1,
                     "bitrate", target_bitrate / 1000,
-                    "key-int-max", 7,
+                    "key-int-max", 60,
                     "option-string", "slice-max-size=1024",
                     "tune", /* zero-latency */ 4,
                     NULL);
