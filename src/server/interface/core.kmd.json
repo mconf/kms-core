@@ -588,7 +588,8 @@
       ],
       "events": [
         "MediaStateChanged",
-        "ConnectionStateChanged"
+        "ConnectionStateChanged",
+        "TelephoneEvent"
       ]
     },
     {
@@ -2018,6 +2019,18 @@
           "name": "newState",
           "doc": "The new state",
           "type": "ConnectionState"
+        }
+      ]
+    },
+    {
+      "name": "TelephoneEvent",
+      "extends": "Media",
+      "doc": "",
+      "properties": [
+        {
+          "name": "dtmfDigit",
+          "doc": "RFC2833 DTMF Digit",
+          "type": "int"
         }
       ]
     },

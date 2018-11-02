@@ -90,6 +90,15 @@ void BaseRtpEndpointImpl::postConstructor ()
                                     std::placeholders::_2, std::placeholders::_3) ),
                               std::dynamic_pointer_cast<BaseRtpEndpointImpl>
                               (shared_from_this() ) );
+
+  telephoneEventHandlerId = register_signal_handler (G_OBJECT (element),
+                               "telephone-event",
+                               std::function <void (GstElement *, guint) > (std::bind (
+                                     &BaseRtpEndpointImpl::telephoneEvent, this,
+                                     std::placeholders::_2) ),
+                               std::dynamic_pointer_cast<BaseRtpEndpointImpl>
+                               (shared_from_this() ) );
+
 }
 
 BaseRtpEndpointImpl::BaseRtpEndpointImpl (const boost::property_tree::ptree
@@ -105,6 +114,7 @@ BaseRtpEndpointImpl::BaseRtpEndpointImpl (const boost::property_tree::ptree
   current_conn_state = std::make_shared <ConnectionState>
                        (ConnectionState::DISCONNECTED);
   connStateChangedHandlerId = 0;
+  telephoneEventHandlerId = 0;
 
   uint stunPort;
   std::string stunAddress;
@@ -180,6 +190,10 @@ BaseRtpEndpointImpl::~BaseRtpEndpointImpl ()
   if (connStateChangedHandlerId > 0) {
     unregister_signal_handler (element, connStateChangedHandlerId);
   }
+
+  if (telephoneEventHandlerId > 0) {
+    unregister_signal_handler (element, telephoneEventHandlerId);
+  }
 }
 
 void
@@ -211,6 +225,17 @@ BaseRtpEndpointImpl::updateMediaState (guint new_state)
 
     this->signalMediaStateChanged (event);
   }
+}
+
+void
+BaseRtpEndpointImpl::telephoneEvent (guint dtmf_digit)
+{
+  std::unique_lock<std::recursive_mutex> lock (mutex);
+
+  TelephoneEvent event (shared_from_this(),
+                           TelephoneEvent::getName (), dtmf_digit);
+
+  this->signalTelephoneEvent (event);
 }
 
 void

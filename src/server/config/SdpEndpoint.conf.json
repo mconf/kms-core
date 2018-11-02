@@ -19,6 +19,9 @@
       "name" : "G722/8000"
     },
     {
+      "name" : "TELEPHONE-EVENT/8000"
+    },
+    {
       "name" : "PCMU/8000"
     },
     {

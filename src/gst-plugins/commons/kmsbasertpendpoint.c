@@ -249,6 +249,13 @@ struct _KmsBaseRtpEndpointPrivate
   KmsRtpSynchronizer *sync_audio;
   KmsRtpSynchronizer *sync_video;
   gboolean perform_video_sync;
+
+  /* Bus */
+  GstBus *bus;
+  int message_handler_id;
+
+  /* DTMF */
+  GstElement *dtmf_depayloader;
 };
 
 /* Signals and args */
@@ -259,6 +266,7 @@ enum
   MEDIA_STATE_CHANGED,
   GET_CONNECTION_STATE,
   CONNECTION_STATE_CHANGED,
+  TELEPHONE_EVENT,
   SIGNAL_REQUEST_LOCAL_KEY_FRAME,
   LAST_SIGNAL
 };
@@ -1226,7 +1234,6 @@ kms_base_rtp_endpoint_get_depayloader_for_caps (GstCaps * caps)
     depayloader = gst_element_factory_create (factory, NULL);
 
     if (depayloader != NULL) {
-      kms_utils_depayloader_monitor_pts_out (depayloader);
       break;
     }
   }
@@ -1681,6 +1688,26 @@ kms_base_rtp_endpoint_get_caps_for_pt (KmsBaseRtpEndpoint * self, guint pt)
   return NULL;
 }
 
+static gboolean
+kms_base_rtp_endpoint_is_telephone_event_caps (GstCaps *caps) {
+
+  GstStructure *structure;
+  gboolean is_telephone_event = FALSE;
+  const gchar *encoding_name;
+
+  if (caps) {
+    structure = gst_caps_get_structure(caps, 0);
+
+    if (gst_structure_has_field(structure, "encoding-name")) {
+      encoding_name = gst_structure_get_string (structure, "encoding-name");
+      is_telephone_event = (g_strcmp0(encoding_name,
+        TELEPHONE_EVENT_ENCONDING_NAME) == 0);
+    }
+  }
+
+  return is_telephone_event;
+}
+
 static GstCaps *
 kms_base_rtp_endpoint_rtpbin_request_pt_map (GstElement * rtpbin, guint session,
     guint pt, KmsBaseRtpEndpoint * self)
@@ -1692,7 +1719,15 @@ kms_base_rtp_endpoint_rtpbin_request_pt_map (GstElement * rtpbin, guint session,
   /* TODO: we will need to use the session if medias share payload numbers */
   caps = kms_base_rtp_endpoint_get_caps_for_pt (self, pt);
 
-  if (caps != NULL) {
+  if (!caps) {
+    caps =
+      gst_caps_new_simple ("application/x-rtp", "payload", G_TYPE_INT, pt,
+      NULL);
+    GST_WARNING_OBJECT (self, "Caps not found pt: %d. Setting: %"GST_PTR_FORMAT,
+    pt, caps);
+  }
+
+  if (!kms_base_rtp_endpoint_is_telephone_event_caps(caps)) {
     KmsRtpSynchronizer *sync = NULL;
 
     if (session == AUDIO_RTP_SESSION) {
@@ -1706,23 +1741,15 @@ kms_base_rtp_endpoint_rtpbin_request_pt_map (GstElement * rtpbin, guint session,
       gint32 clock_rate;
 
       st = gst_caps_get_structure (caps, 0);
-      if (gst_structure_get_int (st, "clock-rate", &clock_rate)) {
+      if (gst_structure_has_field(st,"clock-rate") &&
+        gst_structure_get_int (st, "clock-rate", &clock_rate)) {
         kms_rtp_synchronizer_add_clock_rate_for_pt (sync, pt, clock_rate, NULL);
       } else {
         GST_ERROR_OBJECT (self,
             "Cannot get clockrate from caps: %" GST_PTR_FORMAT, caps);
       }
     }
-
-    return caps;
   }
-
-  caps =
-      gst_caps_new_simple ("application/x-rtp", "payload", G_TYPE_INT, pt,
-      NULL);
-
-  GST_WARNING_OBJECT (self, "Caps not found pt: %d. Setting: %" GST_PTR_FORMAT,
-      pt, caps);
 
   return caps;
 }
@@ -1745,6 +1772,75 @@ kms_base_rtp_endpoint_update_stats (KmsBaseRtpEndpoint * self,
   }
 
   self->priv->stats.probes = g_slist_prepend (self->priv->stats.probes, probe);
+
+  KMS_ELEMENT_UNLOCK (self);
+}
+
+static void
+kms_base_rtp_endpoint_handle_dtmf_event (KmsBaseRtpEndpoint * self,
+  const GstStructure * message_structure)
+{
+  gint dtmf_number = -1;
+
+  gst_structure_get_int (message_structure, "number", &dtmf_number);
+
+  if (dtmf_number >= 0) {
+   GST_INFO_OBJECT (self,"Received DTMF number: %d", dtmf_number);
+
+   g_signal_emit (G_OBJECT (self), obj_signals[TELEPHONE_EVENT], 0,
+    dtmf_number);
+  }
+
+}
+
+static void
+process_bus_message (GstBus * bus, GstMessage * message, gpointer data)
+{
+  KmsBaseRtpEndpoint *self;
+
+  if (!message || !data || !GST_IS_ELEMENT (data)) {
+      return;
+  }
+
+  self = KMS_BASE_RTP_ENDPOINT (data);
+
+  if (g_strcmp0 (GST_OBJECT_NAME (message->src),
+    GST_OBJECT_NAME(self->priv->dtmf_depayloader)) != 0) {
+    return;
+  }
+
+  const GstStructure *message_structure = gst_message_get_structure (message);
+  const char *message_name = gst_structure_get_name (message_structure);
+
+  if (message_structure && message_name &&
+    g_str_has_prefix (message_name, "dtmf-event")) {
+
+    kms_base_rtp_endpoint_handle_dtmf_event(self, message_structure);
+  }
+}
+
+static void
+kms_base_rtp_endpoint_update_dtmf_depayloader_output (KmsBaseRtpEndpoint * self,
+  GstElement *dtmf_depayloader)
+{
+  GstElement *fakesink = gst_element_factory_make("fakesink", NULL);
+
+  g_object_set (fakesink, "async", FALSE, "sync", FALSE, NULL);
+
+  gst_bin_add (GST_BIN (self), fakesink);
+
+  gst_element_link (dtmf_depayloader, fakesink);
+  gst_element_sync_state_with_parent (fakesink);
+
+  GstElement *pipeline =
+    GST_ELEMENT(gst_element_get_parent (GST_ELEMENT(self)));
+
+  KMS_ELEMENT_LOCK (self);
+  self->priv->bus = gst_pipeline_get_bus (GST_PIPELINE (pipeline));
+  self->priv->dtmf_depayloader = dtmf_depayloader;
+  self->priv->message_handler_id =
+    g_signal_connect (G_OBJECT (self->priv->bus), "message",
+    G_CALLBACK (process_bus_message), self);
 
   KMS_ELEMENT_UNLOCK (self);
 }
@@ -1787,9 +1883,21 @@ kms_base_rtp_endpoint_rtpbin_pad_added (GstElement * rtpbin, GstPad * pad,
   if (depayloader != NULL) {
     GST_DEBUG_OBJECT (self, "Found depayloader %" GST_PTR_FORMAT, depayloader);
     kms_base_rtp_endpoint_update_stats (self, depayloader, media);
+
+    GstElement *queue = gst_element_factory_make ("queue", NULL);
+    g_object_set (queue, "leaky", 2, NULL);
+    gst_bin_add (GST_BIN(self), queue);
+
     gst_bin_add (GST_BIN (self), depayloader);
-    gst_element_link_pads (depayloader, "src", agnostic, "sink");
-    gst_element_link_pads (rtpbin, GST_OBJECT_NAME (pad), depayloader, "sink");
+    if (g_str_has_prefix (GST_OBJECT_NAME (depayloader), "rtpdtmfdepay")) {
+      kms_base_rtp_endpoint_update_dtmf_depayloader_output (self, depayloader);
+    } else {
+      kms_utils_depayloader_monitor_pts_out (depayloader);
+      gst_element_link_pads (depayloader, "src", agnostic, "sink");
+    }
+    gst_element_link_pads (rtpbin, GST_OBJECT_NAME (pad), queue, "sink");
+    gst_element_link (queue, depayloader);
+    gst_element_sync_state_with_parent (queue);
     gst_element_sync_state_with_parent (depayloader);
   } else {
     GstElement *fake = gst_element_factory_make ("fakesink", NULL);
@@ -2474,6 +2582,22 @@ kms_base_rtp_endpoint_get_property (GObject * object, guint property_id,
 }
 
 static void
+kms_base_rtp_endpoint_remove_bus (KmsBaseRtpEndpoint *self) {
+  KMS_ELEMENT_LOCK(self);
+
+  if (self->priv->bus && self->priv->message_handler_id) {
+    g_signal_handler_disconnect (self->priv->bus,
+      self->priv->message_handler_id);
+
+    g_object_unref(self->priv->bus);
+    self->priv->bus = NULL;
+    self->priv->message_handler_id = 0;
+  }
+
+  KMS_ELEMENT_UNLOCK(self);
+}
+
+static void
 kms_base_rtp_endpoint_dispose (GObject * gobject)
 {
   KmsBaseRtpEndpoint *self = KMS_BASE_RTP_ENDPOINT (gobject);
@@ -2493,6 +2617,8 @@ kms_base_rtp_endpoint_dispose (GObject * gobject)
     g_signal_emit (G_OBJECT (self), obj_signals[MEDIA_STOP], 0,
         KMS_MEDIA_TYPE_VIDEO, TRUE);
   }
+
+  kms_base_rtp_endpoint_remove_bus(self);
 
   rtp_media_config_unref (self->priv->audio_config);
   rtp_media_config_unref (self->priv->video_config);
@@ -2986,6 +3112,13 @@ kms_base_rtp_endpoint_class_init (KmsBaseRtpEndpointClass * klass)
       G_SIGNAL_ACTION | G_SIGNAL_RUN_LAST,
       G_STRUCT_OFFSET (KmsBaseRtpEndpointClass, request_local_key_frame), NULL,
       NULL, __kms_core_marshal_BOOLEAN__VOID, G_TYPE_BOOLEAN, 0);
+
+  obj_signals[TELEPHONE_EVENT] =
+      g_signal_new ("telephone-event",
+      G_TYPE_FROM_CLASS (klass),
+      G_SIGNAL_RUN_LAST,
+      G_STRUCT_OFFSET (KmsBaseRtpEndpointClass, telephone_event), NULL,
+      NULL, NULL, G_TYPE_NONE, 1, G_TYPE_INT);
 
   g_type_class_add_private (klass, sizeof (KmsBaseRtpEndpointPrivate));
 
