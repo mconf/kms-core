@@ -1384,7 +1384,7 @@ kms_utils_depayloader_adjust_pts_out (AdjustPtsData * data, GstBuffer * buffer)
       && pts_current <= data->last_pts) {
     pts_fixed = data->last_pts + GST_MSECOND;
 
-    GST_WARNING_OBJECT (data->element, "Fix PTS not strictly increasing"
+    GST_INFO_OBJECT (data->element, "Fix PTS not strictly increasing"
         ", last: %" GST_TIME_FORMAT
         ", current: %" GST_TIME_FORMAT
         ", fixed = last + 1: %" GST_TIME_FORMAT,

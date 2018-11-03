@@ -1952,99 +1952,6 @@ kms_base_rtp_endpoint_jitterbuffer_set_latency (GstElement * jitterbuffer,
   g_object_unref (src_pad);
 }
 
-static gboolean
-kms_base_rtp_endpoint_sync_rtp_it (GstBuffer ** buffer, guint idx,
-    KmsRtpSynchronizer * sync)
-{
-  *buffer = gst_buffer_make_writable (*buffer);
-  kms_rtp_synchronizer_process_rtp_buffer (sync, *buffer, NULL);
-
-  return TRUE;
-}
-
-static GstPadProbeReturn
-kms_base_rtp_endpoint_sync_rtp_probe (GstPad * pad, GstPadProbeInfo * info,
-    KmsRtpSynchronizer * sync)
-{
-  if (GST_PAD_PROBE_INFO_TYPE (info) & GST_PAD_PROBE_TYPE_BUFFER) {
-    GstBuffer *buffer = GST_PAD_PROBE_INFO_BUFFER (info);
-
-    buffer = gst_buffer_make_writable (buffer);
-    kms_rtp_synchronizer_process_rtp_buffer (sync, buffer, NULL);
-    GST_PAD_PROBE_INFO_DATA (info) = buffer;
-  }
-  else if (GST_PAD_PROBE_INFO_TYPE (info) & GST_PAD_PROBE_TYPE_BUFFER_LIST) {
-    GstBufferList *list = GST_PAD_PROBE_INFO_BUFFER_LIST (info);
-
-    list = gst_buffer_list_make_writable (list);
-    gst_buffer_list_foreach (list,
-        (GstBufferListFunc) kms_base_rtp_endpoint_sync_rtp_it, sync);
-    GST_PAD_PROBE_INFO_DATA (info) = list;
-  }
-
-  return GST_PAD_PROBE_OK;
-}
-
-static void
-kms_base_rtp_endpoint_jitterbuffer_monitor_rtp_out (GstElement * jitterbuffer,
-    KmsRtpSynchronizer * sync)
-{
-  GstPad *src_pad;
-
-  GST_INFO_OBJECT (jitterbuffer, "Add probe: Adjust jitterbuffer PTS out");
-
-  src_pad = gst_element_get_static_pad (jitterbuffer, "src");
-  gst_pad_add_probe (src_pad,
-      GST_PAD_PROBE_TYPE_BUFFER | GST_PAD_PROBE_TYPE_BUFFER_LIST,
-      (GstPadProbeCallback) kms_base_rtp_endpoint_sync_rtp_probe, sync, NULL);
-  g_object_unref (src_pad);
-}
-
-static gboolean
-kms_base_rtp_endpoint_sync_rtcp_it (GstBuffer ** buffer, guint idx,
-    KmsRtpSynchronizer * sync)
-{
-  kms_rtp_synchronizer_process_rtcp_buffer (sync, *buffer, NULL);
-
-  return TRUE;
-}
-
-static GstPadProbeReturn
-kms_base_rtp_endpoint_sync_rtcp_probe (GstPad * pad, GstPadProbeInfo * info,
-    KmsRtpSynchronizer * sync)
-{
-  return GST_PAD_PROBE_OK;
-
-  if (GST_PAD_PROBE_INFO_TYPE (info) & GST_PAD_PROBE_TYPE_BUFFER) {
-    GstBuffer *buffer = GST_PAD_PROBE_INFO_BUFFER (info);
-
-    kms_rtp_synchronizer_process_rtcp_buffer (sync, buffer, NULL);
-  }
-  else if (GST_PAD_PROBE_INFO_TYPE (info) & GST_PAD_PROBE_TYPE_BUFFER_LIST) {
-    GstBufferList *list = GST_PAD_PROBE_INFO_BUFFER_LIST (info);
-
-    gst_buffer_list_foreach (list,
-        (GstBufferListFunc) kms_base_rtp_endpoint_sync_rtcp_it, sync);
-  }
-
-  return GST_PAD_PROBE_OK;
-}
-
-static void
-kms_base_rtp_endpoint_jitterbuffer_monitor_rtcp_in (GstElement * jitterbuffer,
-    GstPad * new_pad, KmsRtpSynchronizer * sync)
-{
-  if (g_strcmp0 (GST_PAD_NAME (new_pad), "sink_rtcp") != 0) {
-    return;
-  }
-
-  GST_INFO_OBJECT (jitterbuffer, "Add probe: Get jitterbuffer RTCP SR timing");
-
-  gst_pad_add_probe (new_pad,
-      GST_PAD_PROBE_TYPE_BUFFER | GST_PAD_PROBE_TYPE_BUFFER_LIST,
-      (GstPadProbeCallback) kms_base_rtp_endpoint_sync_rtcp_probe, sync, NULL);
-}
-
 static void
 kms_base_rtp_endpoint_rtpbin_new_jitterbuffer (GstElement * rtpbin,
     GstElement * jitterbuffer,
@@ -2053,35 +1960,19 @@ kms_base_rtp_endpoint_rtpbin_new_jitterbuffer (GstElement * rtpbin,
   KmsRTPSessionStats *rtp_stats;
   KmsSSRCStats *ssrc_stats;
 
-  g_object_set (jitterbuffer, "mode", 4 /* synced */ ,
-      "latency", JB_INITIAL_LATENCY, NULL);
+  g_object_set (jitterbuffer,
+      "latency", JB_INITIAL_LATENCY, "drop-on-latency", TRUE, NULL);
 
   switch (session) {
     case AUDIO_RTP_SESSION: {
       kms_base_rtp_endpoint_jitterbuffer_set_latency (jitterbuffer,
           JB_READY_AUDIO_LATENCY);
 
-      kms_base_rtp_endpoint_jitterbuffer_monitor_rtp_out (jitterbuffer,
-          self->priv->sync_audio);
-
-      g_signal_connect (jitterbuffer, "pad-added",
-          G_CALLBACK (kms_base_rtp_endpoint_jitterbuffer_monitor_rtcp_in),
-          self->priv->sync_audio);
-
       break;
     }
     case VIDEO_RTP_SESSION: {
       kms_base_rtp_endpoint_jitterbuffer_set_latency (jitterbuffer,
           JB_READY_VIDEO_LATENCY);
-
-      kms_base_rtp_endpoint_jitterbuffer_monitor_rtp_out (jitterbuffer,
-          self->priv->sync_video);
-
-      if (self->priv->perform_video_sync) {
-        g_signal_connect (jitterbuffer, "pad-added",
-            G_CALLBACK (kms_base_rtp_endpoint_jitterbuffer_monitor_rtcp_in),
-            self->priv->sync_video);
-      }
 
       break;
     }
