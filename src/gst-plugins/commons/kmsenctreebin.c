@@ -26,7 +26,7 @@
 #define GST_CAT_DEFAULT kms_enc_tree_bin_debug
 GST_DEBUG_CATEGORY_STATIC (GST_CAT_DEFAULT);
 
-#define LEAKY_TIME 600000000    /*600 ms */
+#define LEAKY_TIME 200000000    /*200 ms */
 #define kms_enc_tree_bin_parent_class parent_class
 G_DEFINE_TYPE (KmsEncTreeBin, kms_enc_tree_bin, KMS_TYPE_TREE_BIN);
 
