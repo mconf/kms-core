@@ -1543,7 +1543,7 @@ static void
 complete_caps_with_fb (GstCaps * caps, const GstSDPMedia * media,
     const gchar * payload)
 {
-  gboolean fir, pli;
+  gboolean fir, pli, fir_tmmbr;
   guint a;
 
   fir = pli = FALSE;
@@ -1561,15 +1561,21 @@ complete_caps_with_fb (GstCaps * caps, const GstSDPMedia * media,
       continue;
     }
 
+    if (sdp_utils_rtcp_fb_attr_check_type (attr, payload, RTCP_FB_FIR_TMMBR)) {
+      fir_tmmbr = TRUE;
+      continue;
+    }
+
     if (sdp_utils_rtcp_fb_attr_check_type (attr, payload, RTCP_FB_PLI)) {
       pli = TRUE;
       continue;
     }
   }
 
-  if (fir) {
+  if (fir || fir_tmmbr) {
     gst_caps_set_simple (caps, "rtcp-fb-ccm-fir", G_TYPE_BOOLEAN, fir, NULL);
   }
+
   if (pli) {
     gst_caps_set_simple (caps, "rtcp-fb-nack-pli", G_TYPE_BOOLEAN, pli, NULL);
   }

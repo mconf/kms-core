@@ -428,7 +428,7 @@ discont_detection_probe (GstPad * pad, GstPadProbeInfo * info, gpointer data)
   if (GST_BUFFER_FLAG_IS_SET (buffer, GST_BUFFER_FLAG_DISCONT)) {
     if (GST_BUFFER_FLAG_IS_SET (buffer, GST_BUFFER_FLAG_DELTA_UNIT)) {
       GST_WARNING_OBJECT (pad, "Stream discontinuity detected on non-keyframe");
-      kms_utils_drop_until_keyframe (pad, FALSE);
+      kms_utils_drop_until_keyframe (pad, TRUE);
 
       return GST_PAD_PROBE_DROP;
     }
