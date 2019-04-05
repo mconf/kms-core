@@ -25,7 +25,6 @@
 #include <gst/gst.h>
 #include <mutex>
 #include <set>
-#include <random>
 #include "MediaFlowOutStateChange.hpp"
 #include "MediaFlowInStateChange.hpp"
 #include "MediaTranscodingStateChange.hpp"
@@ -172,7 +171,8 @@ protected:
   void collectLatencyStats (std::vector<std::shared_ptr<MediaLatencyStat>>
                             &latencyStats, const GstStructure *stats);
   virtual void fillStatsReport (std::map <std::string, std::shared_ptr<Stats>>
-                                &report, const GstStructure *stats, double timestamp);
+                                &report, const GstStructure *stats,
+                                double timestamp, int64_t timestampMillis);
 
   virtual void prepareSinkConnection (std::shared_ptr<MediaElement> src,
                                       std::shared_ptr<MediaType> mediaType,
@@ -188,9 +188,6 @@ private:
   std::map < std::shared_ptr <MediaType>, std::map < std::string,
       std::set<std::shared_ptr<ElementConnectionDataInternal> >> , MediaTypeCmp >
       sinks;
-
-  std::mt19937_64 rnd {std::random_device{}() };
-  std::uniform_int_distribution<> dist {1, 100};
 
   gulong padAddedHandlerId = 0;
   gulong mediaFlowOutHandler = 0;

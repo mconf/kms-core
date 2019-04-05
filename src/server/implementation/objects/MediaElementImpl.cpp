@@ -36,7 +36,10 @@
 #include "ElementStats.hpp"
 #include "kmsstats.h"
 #include <SignalHandler.hpp>
+
+#include <chrono>
 #include <memory>
+#include <random>
 
 #define GST_CAT_DEFAULT kurento_media_element_impl
 GST_DEBUG_CATEGORY_STATIC (GST_CAT_DEFAULT);
@@ -285,6 +288,25 @@ processBusMessage (GstBus *bus, GstMessage *msg, MediaElementImpl *self)
   return;
 }
 
+/* https://stackoverflow.com/questions/21237905/how-do-i-generate-thread-safe-uniform-random-numbers/21238187#21238187
+ * > Distributions are extremely cheap (they will be completely inlined by the
+ * optimiser so that the only remaining overhead is the actual random number
+ * rescaling). Don't be afraid to regenerate them as often as you need.
+ *
+ * The actual random number generator, on the other hand, is a heavy-weight
+ * object carrying a lot of state and requiring quite some time to be
+ * constructed, so that should only be initialised once per thread (or even
+ * across threads, but then you'd need to synchronise access which is more
+ * costly in the long run).
+ */
+static std::chrono::milliseconds
+millisRand ()
+{
+    static thread_local std::mt19937_64 generator;
+    std::uniform_int_distribution<int> distribution (1, 100);
+    return std::chrono::milliseconds (distribution (generator));
+}
+
 void
 _media_element_pad_added (GstElement *elem, GstPad *pad, gpointer data)
 {
@@ -295,7 +317,7 @@ _media_element_pad_added (GstElement *elem, GstPad *pad, gpointer data)
 
   do {
     if (retry) {
-      GST_DEBUG_OBJECT (pad, "Retriying connection");
+      GST_DEBUG_OBJECT (pad, "Retrying connection");
     }
 
     if (GST_PAD_IS_SRC (pad) ) {
@@ -303,7 +325,7 @@ _media_element_pad_added (GstElement *elem, GstPad *pad, gpointer data)
           std::defer_lock);
       std::shared_ptr<MediaType> type;
 
-      retry = !lock.try_lock_for (std::chrono::milliseconds {self->dist (self->rnd) });
+      retry = !lock.try_lock_for (millisRand ());
 
       if (retry) {
         continue;
@@ -334,7 +356,7 @@ _media_element_pad_added (GstElement *elem, GstPad *pad, gpointer data)
               it->getSink()->sourcesMutex,
               std::defer_lock);
 
-            retry = !sinkLock.try_lock_for (std::chrono::milliseconds {self->dist (self->rnd) });
+            retry = !sinkLock.try_lock_for (millisRand ());
 
             if (retry) {
               continue;
@@ -351,7 +373,7 @@ _media_element_pad_added (GstElement *elem, GstPad *pad, gpointer data)
           std::defer_lock);
       std::shared_ptr<MediaType> type;
 
-      retry = !lock.try_lock_for (std::chrono::milliseconds {self->dist (self->rnd) });
+      retry = !lock.try_lock_for (millisRand ());
 
       if (retry) {
         continue;
@@ -381,7 +403,7 @@ _media_element_pad_added (GstElement *elem, GstPad *pad, gpointer data)
             std::unique_lock<std::recursive_timed_mutex> sourceLock (source->sinksMutex,
                 std::defer_lock);
 
-            retry = !sourceLock.try_lock_for (std::chrono::milliseconds {self->dist (self->rnd) });
+            retry = !sourceLock.try_lock_for (millisRand ());
 
             if (retry) {
               continue;
@@ -524,6 +546,7 @@ MediaElementImpl::onMediaTranscodingStateChange (gboolean isTranscoding,
                                        state, binName, padTypeToMediaType (type));
     signalMediaTranscodingStateChange (event);
   } catch (std::bad_weak_ptr &e) {
+    GST_WARNING_OBJECT (element, "Cannot emit event: MediaTranscodingStateChange");
   }
 }
 
@@ -584,14 +607,12 @@ MediaElementImpl::MediaElementImpl (const boost::property_tree::ptree &config,
   pipe->addElement (element);
 
   //read default configuration for output bitrate
-  try {
-    int bitrate = getConfigValue<int, MediaElement> ("outputBitrate");
+  int bitrate;
+  if (getConfigValue<int, MediaElement> (&bitrate, "outputBitrate")) {
     GST_DEBUG ("Output bitrate configured to %d bps", bitrate);
     g_object_set (G_OBJECT (element), MIN_OUTPUT_BITRATE, bitrate,
                   MAX_OUTPUT_BITRATE, bitrate, NULL);
-  } catch (boost::property_tree::ptree_error &e) {
   }
-
 }
 
 MediaElementImpl::~MediaElementImpl ()
@@ -644,7 +665,7 @@ void MediaElementImpl::disconnectAll ()
     std::unique_lock<std::recursive_timed_mutex> sinkLock (sinksMutex,
         std::defer_lock);
 
-    if (!sinkLock.try_lock_for (std::chrono::milliseconds {dist (rnd) }) ) {
+    if (!sinkLock.try_lock_for (millisRand ())) {
       GST_DEBUG_OBJECT (getGstreamerElement(), "Retry disconnect all");
       continue;
     }
@@ -655,7 +676,7 @@ void MediaElementImpl::disconnectAll ()
       std::unique_lock<std::recursive_timed_mutex> sinkLock (sinkImpl->sourcesMutex,
           std::defer_lock);
 
-      if (sinkLock.try_lock_for (std::chrono::milliseconds {dist (rnd) }) ) {
+      if (sinkLock.try_lock_for (millisRand ())) {
         disconnect (connData->getSink (), connData->getType (),
                     connData->getSourceDescription (),
                     connData->getSinkDescription () );
@@ -671,7 +692,7 @@ void MediaElementImpl::disconnectAll ()
     std::unique_lock<std::recursive_timed_mutex> sourceLock (sourcesMutex,
         std::defer_lock);
 
-    if (!sourceLock.try_lock_for (std::chrono::milliseconds {dist (rnd) }) ) {
+    if (!sourceLock.try_lock_for (millisRand ())) {
       GST_DEBUG_OBJECT (getGstreamerElement(), "Retry disconnect all");
       continue;
     }
@@ -683,7 +704,7 @@ void MediaElementImpl::disconnectAll ()
       std::unique_lock<std::recursive_timed_mutex> sourceLock (sourceImpl->sinksMutex,
           std::defer_lock);
 
-      if (sourceLock.try_lock_for (std::chrono::milliseconds {dist (rnd) }) ) {
+      if (sourceLock.try_lock_for (millisRand ())) {
         connData->getSource ()->disconnect (connData->getSink (),
                                             connData->getType (),
                                             connData->getSourceDescription (),
@@ -1217,7 +1238,12 @@ std::map <std::string, std::shared_ptr<Stats>>
 
   g_signal_emit_by_name (getGstreamerElement(), "stats", selector, &stats);
 
-  fillStatsReport(statsReport, stats, time(nullptr));
+  const auto epoch = std::chrono::high_resolution_clock::now ()
+      .time_since_epoch ();
+  const int64_t timestampMillis =
+      std::chrono::duration_cast<std::chrono::milliseconds> (epoch).count ();
+
+  fillStatsReport(statsReport, stats, time(nullptr), timestampMillis);
 
   gst_structure_free (stats);
 
@@ -1321,7 +1347,8 @@ setDeprecatedProperties (std::shared_ptr<ElementStats> eStats)
 void
 MediaElementImpl::fillStatsReport (std::map
                                    <std::string, std::shared_ptr<Stats>>
-                                   &report, const GstStructure *stats, double timestamp)
+                                   &report, const GstStructure *stats,
+                                   double timestamp, int64_t timestampMillis)
 {
   std::shared_ptr<Stats> elementStats;
   GstStructure *latencies;
@@ -1360,7 +1387,7 @@ MediaElementImpl::fillStatsReport (std::map
   } else {
     elementStats = std::make_shared <ElementStats> (getId (),
                    std::make_shared <StatsType> (StatsType::element), timestamp,
-                   0.0, 0.0, inputLatencies);
+                   timestampMillis, 0.0, 0.0, inputLatencies);
     report[getId ()] = elementStats;
   }
 
