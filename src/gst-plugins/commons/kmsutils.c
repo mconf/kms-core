@@ -256,6 +256,12 @@ kms_utils_get_caps_codec_name_from_sdp (const gchar * codec_name)
   if (g_ascii_strcasecmp (VP8_ENCONDING_NAME, codec_name) == 0) {
     return "VP8";
   }
+  if (g_ascii_strcasecmp (G722_ENCONDING_NAME, codec_name) == 0) {
+    return "G722";
+  }
+  if (g_ascii_strcasecmp (TELEPHONE_EVENT_ENCONDING_NAME, codec_name) == 0) {
+    return "TELEPHONE-EVENT";
+  }
 
   return codec_name;
 }
@@ -459,7 +465,7 @@ discont_detection_probe (GstPad * pad, GstPadProbeInfo * info, gpointer data)
   if (GST_BUFFER_FLAG_IS_SET (buffer, GST_BUFFER_FLAG_DISCONT)) {
     if (GST_BUFFER_FLAG_IS_SET (buffer, GST_BUFFER_FLAG_DELTA_UNIT)) {
       GST_WARNING_OBJECT (pad, "Stream discontinuity detected on non-keyframe");
-      kms_utils_drop_until_keyframe (pad, FALSE);
+      kms_utils_drop_until_keyframe (pad, TRUE);
 
       return GST_PAD_PROBE_DROP;
     }
@@ -1418,7 +1424,7 @@ kms_utils_depayloader_adjust_pts_out (AdjustPtsData * data, GstBuffer * buffer)
       && pts_current <= data->last_pts) {
     pts_fixed = data->last_pts + GST_MSECOND;
 
-    GST_WARNING_OBJECT (data->element, "Fix PTS not strictly increasing"
+    GST_INFO_OBJECT (data->element, "Fix PTS not strictly increasing"
         ", last: %" GST_TIME_FORMAT
         ", current: %" GST_TIME_FORMAT
         ", fixed = last + 1: %" GST_TIME_FORMAT,

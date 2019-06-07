@@ -686,11 +686,6 @@ kms_base_rtp_session_start_transport_send (KmsBaseRtpSession * self,
 
   len = gst_sdp_message_medias_len (sdp_sess->neg_sdp);
 
-  if (len != gst_sdp_message_medias_len (sdp_sess->remote_sdp)) {
-    GST_ERROR_OBJECT (self, "Remote SDP has different number of medias");
-    g_assert_not_reached ();
-  }
-
   for (i = 0; i < len; i++) {
     const GstSDPMedia *neg_media =
         gst_sdp_message_get_media (sdp_sess->neg_sdp, i);

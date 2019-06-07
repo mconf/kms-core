@@ -72,6 +72,7 @@ static gchar *rtpmaps[] = {
   "LPC/8000",
   "PCMA/8000",
   "G722/8000",
+  "telephone-event/8000",
   "L16/44100/2",
   "L16/44100",
   "QCELP/8000",

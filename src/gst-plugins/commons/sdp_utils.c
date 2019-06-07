@@ -44,6 +44,7 @@ static gchar *rtpmaps[] = {
   "LPC/8000/1",
   "PCMA/8000/1",
   "G722/8000/1",
+  "telephone-event/8000",
   "L16/44100/2",
   "L16/44100/1",
   "QCELP/8000/1",
@@ -605,8 +606,15 @@ sdp_utils_rtcp_fb_attr_check_type (const gchar * attr,
 {
   gchar *aux;
   gboolean ret;
+  /*
+    If the rtcp_fb is like "* ccm fir"
+    then just ignore the payload
+  */
+  if (attr[0] == '*')
+    aux = g_strconcat("*", " ", type, NULL);
+  else
+    aux = g_strconcat (pt, " ", type, NULL);
 
-  aux = g_strconcat (pt, " ", type, NULL);
   ret = g_strcmp0 (attr, aux) == 0;
   g_free (aux);
 

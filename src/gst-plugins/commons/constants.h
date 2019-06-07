@@ -23,6 +23,7 @@
 #define SDP_MEDIA_RTCP_FB_GOOG_REMB "goog-remb"
 #define SDP_MEDIA_RTCP_FB_PLI "pli"
 #define SDP_MEDIA_RTCP_FB_FIR "fir"
+#define SDP_MEDIA_RTCP_FB_TMMBR "tmmbr"
 
 /* RTP Header Extensions */
 #define RTP_HDR_EXT_ABS_SEND_TIME_URI "http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time"
@@ -72,5 +73,7 @@
 /* RTP enconding names */
 #define OPUS_ENCONDING_NAME "OPUS"
 #define VP8_ENCONDING_NAME "VP8"
+#define G722_ENCONDING_NAME "G722"
+#define TELEPHONE_EVENT_ENCONDING_NAME "TELEPHONE-EVENT"
 
 #endif /* __KMS_CONSTANTS_H__ */

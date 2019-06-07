@@ -53,12 +53,24 @@ GST_DEBUG_CATEGORY_STATIC (GST_CAT_DEFAULT);
 #define PROP_MIN_PORT "min-port"
 #define PROP_MAX_PORT "max-port"
 
+#define PARAM_STUN_SERVER "stunServerAddress"
+#define PARAM_STUN_SERVER_PORT "stunServerPort"
+#define PARAM_TURN_URL "turnURL"
+
+#define PROP_STUN_SERVER "stun-server"
+#define PROP_STUN_SERVER_PORT "stun-server-port"
+#define PROP_TURN_URL "turn-url"
+
+
 /* Fixed point conversion macros */
 #define FRIC        65536.                  /* 2^16 as a double */
 #define FP2D(r)     ((double)(r) / FRIC)
 
 namespace kurento
 {
+
+static const uint DEFAULT_STUN_PORT = 3478;
+
 void BaseRtpEndpointImpl::postConstructor ()
 {
   SdpEndpointImpl::postConstructor ();
@@ -78,6 +90,15 @@ void BaseRtpEndpointImpl::postConstructor ()
                                     std::placeholders::_2, std::placeholders::_3) ),
                               std::dynamic_pointer_cast<BaseRtpEndpointImpl>
                               (shared_from_this() ) );
+
+  telephoneEventHandlerId = register_signal_handler (G_OBJECT (element),
+                               "telephone-event",
+                               std::function <void (GstElement *, guint) > (std::bind (
+                                     &BaseRtpEndpointImpl::telephoneEvent, this,
+                                     std::placeholders::_2) ),
+                               std::dynamic_pointer_cast<BaseRtpEndpointImpl>
+                               (shared_from_this() ) );
+
 }
 
 BaseRtpEndpointImpl::BaseRtpEndpointImpl (const boost::property_tree::ptree
@@ -93,6 +114,7 @@ BaseRtpEndpointImpl::BaseRtpEndpointImpl (const boost::property_tree::ptree
   current_conn_state = std::make_shared <ConnectionState>
                        (ConnectionState::DISCONNECTED);
   connStateChangedHandlerId = 0;
+  telephoneEventHandlerId = 0;
 
   guint minPort;
   if (getConfigValue<guint, BaseRtpEndpoint> (&minPort, PARAM_MIN_PORT)) {
@@ -102,6 +124,44 @@ BaseRtpEndpointImpl::BaseRtpEndpointImpl (const boost::property_tree::ptree
   guint maxPort;
   if (getConfigValue <guint, BaseRtpEndpoint> (&maxPort, PARAM_MAX_PORT)) {
     g_object_set (getGstreamerElement (), PROP_MAX_PORT, maxPort, NULL);
+  }
+
+  uint stunPort;
+  if (!getConfigValue <uint, BaseRtpEndpoint> (&stunPort, "stunServerPort",
+      DEFAULT_STUN_PORT)) {
+    GST_INFO ("STUN server Port not found in config;"
+              " using default value: %d", DEFAULT_STUN_PORT);
+  } else {
+    std::string stunAddress;
+    if (!getConfigValue <std::string, BaseRtpEndpoint> (&stunAddress,
+        "stunServerAddress")) {
+      GST_INFO ("STUN server IP address not found in config;"
+                " NAT traversal requires either STUN or TURN server");
+    } else {
+      GST_INFO ("Using STUN reflexive server IP: %s", stunAddress.c_str());
+      GST_INFO ("Using STUN reflexive server Port: %d", stunPort);
+
+      g_object_set (G_OBJECT (element), "stun-server-port", stunPort, NULL);
+      g_object_set (G_OBJECT (element), "stun-server", stunAddress.c_str(),
+        NULL);
+    }
+  }
+
+  std::string turnURL;
+  if (getConfigValue <std::string, BaseRtpEndpoint> (&turnURL, "turnURL")) {
+    std::string safeURL = "<user:password>";
+    size_t separatorPos = turnURL.find_last_of('@');
+    if (separatorPos == std::string::npos) {
+      safeURL.append("@").append(turnURL);
+    } else {
+      safeURL.append(turnURL.substr(separatorPos));
+    }
+    GST_INFO ("Using TURN relay server: %s", safeURL.c_str());
+
+    g_object_set (G_OBJECT (element), "turn-url", turnURL.c_str(), NULL);
+  } else {
+    GST_INFO ("TURN server IP address not found in config;"
+              " NAT traversal requires either STUN or TURN server");
   }
 }
 
@@ -113,6 +173,10 @@ BaseRtpEndpointImpl::~BaseRtpEndpointImpl ()
 
   if (connStateChangedHandlerId > 0) {
     unregister_signal_handler (element, connStateChangedHandlerId);
+  }
+
+  if (telephoneEventHandlerId > 0) {
+    unregister_signal_handler (element, telephoneEventHandlerId);
   }
 }
 
@@ -145,6 +209,17 @@ BaseRtpEndpointImpl::updateMediaState (guint new_state)
 
     this->signalMediaStateChanged (event);
   }
+}
+
+void
+BaseRtpEndpointImpl::telephoneEvent (guint dtmf_digit)
+{
+  std::unique_lock<std::recursive_mutex> lock (mutex);
+
+  TelephoneEvent event (shared_from_this(),
+                           TelephoneEvent::getName (), dtmf_digit);
+
+  this->signalTelephoneEvent (event);
 }
 
 void

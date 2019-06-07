@@ -66,6 +66,7 @@ public:
 
   sigc::signal<void, MediaStateChanged> signalMediaStateChanged;
   sigc::signal<void, ConnectionStateChanged> signalConnectionStateChanged;
+  sigc::signal<void, TelephoneEvent> signalTelephoneEvent;
 
   /* Next methods are automatically implemented by code generator */
   using SdpEndpointImpl::connect;
@@ -90,10 +91,12 @@ private:
   gulong mediaStateChangedHandlerId;
   std::shared_ptr<ConnectionState> current_conn_state;
   gulong connStateChangedHandlerId;
+  gulong telephoneEventHandlerId;
   std::recursive_mutex mutex;
 
   void updateMediaState (guint new_state);
   void updateConnectionState (gchar *sessId, guint new_state);
+  void telephoneEvent (guint dtmf_digit);
 
   void collectEndpointStats (std::map <std::string, std::shared_ptr<Stats>>
                              &statsReport, std::string id, const GstStructure *stats,

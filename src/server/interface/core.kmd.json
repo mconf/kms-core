@@ -588,7 +588,8 @@
       ],
       "events": [
         "MediaStateChanged",
-        "ConnectionStateChanged"
+        "ConnectionStateChanged",
+        "TelephoneEvent"
       ]
     },
     {
@@ -1049,6 +1050,7 @@
       "typeFormat": "ENUM",
       "values": [
         "OPUS",
+        "G722",
         "PCMU",
         "RAW"
       ],
@@ -2028,6 +2030,18 @@
           "name": "newState",
           "doc": "The new state",
           "type": "ConnectionState"
+        }
+      ]
+    },
+    {
+      "name": "TelephoneEvent",
+      "extends": "Media",
+      "doc": "",
+      "properties": [
+        {
+          "name": "dtmfDigit",
+          "doc": "RFC2833 DTMF Digit",
+          "type": "int"
         }
       ]
     },

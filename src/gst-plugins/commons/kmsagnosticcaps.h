@@ -65,6 +65,7 @@
   "audio/mpeg,mpegversion=[2, 4];" \
   "audio/x-vorbis;" \
   "audio/x-opus;" \
+  "audio/G722;" \
   "audio/AMR,rate=[8000, 16000],channels=1;" \
   "audio/x-gsm;"
 

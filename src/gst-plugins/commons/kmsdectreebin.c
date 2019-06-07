@@ -45,7 +45,7 @@ create_decoder_for_caps (const GstCaps * caps, const GstCaps * raw_caps)
   for (l = decoder_list; l != NULL; l = l->next) {
     decoder_factory = GST_ELEMENT_FACTORY (l->data);
 
-    if (g_str_has_prefix (GST_OBJECT_NAME (decoder_factory), "openh264")) {
+    if (g_str_has_prefix (GST_OBJECT_NAME (decoder_factory), "libx264")) {
       decoder_list = g_list_remove (decoder_list, l->data);
       decoder_list = g_list_prepend (decoder_list, decoder_factory);
       contains_openh264 = TRUE;
