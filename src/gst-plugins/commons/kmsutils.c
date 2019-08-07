@@ -256,6 +256,12 @@ kms_utils_get_caps_codec_name_from_sdp (const gchar * codec_name)
   if (g_ascii_strcasecmp (VP8_ENCONDING_NAME, codec_name) == 0) {
     return "VP8";
   }
+  if (g_ascii_strcasecmp (G722_ENCONDING_NAME, codec_name) == 0) {
+    return "G722";
+  }
+  if (g_ascii_strcasecmp (TELEPHONE_EVENT_ENCONDING_NAME, codec_name) == 0) {
+    return "TELEPHONE-EVENT";
+  }
 
   return codec_name;
 }

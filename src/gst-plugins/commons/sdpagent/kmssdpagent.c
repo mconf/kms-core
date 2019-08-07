@@ -1618,13 +1618,16 @@ end:
         sdp_handler);
   }
 
-  kms_sdp_agent_fire_on_answer_callback (data->agent,
+  if (!sdp_utils_media_is_inactive(answer_media)) {
+    kms_sdp_agent_fire_on_answer_callback (data->agent,
       sdp_handler->sdph->handler, answer_media);
 
-  if (gst_sdp_message_add_media (data->answer, answer_media) != GST_SDP_OK) {
-    g_set_error_literal (err, KMS_SDP_AGENT_ERROR, SDP_AGENT_UNEXPECTED_ERROR,
-        "Can not add m-line to answer");
-    ret = FALSE;
+      if (gst_sdp_message_add_media (data->answer,
+        answer_media) != GST_SDP_OK) {
+        g_set_error_literal (err, KMS_SDP_AGENT_ERROR,
+          SDP_AGENT_UNEXPECTED_ERROR,"Can not add m-line to answer");
+        ret = FALSE;
+      }
   }
 
   gst_sdp_media_free (answer_media);

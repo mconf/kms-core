@@ -423,15 +423,10 @@ kms_rtp_synchronizer_process_rtp_buffer_mapped (KmsRtpSynchronizer * self,
   }
 
   pt = gst_rtp_buffer_get_payload_type (rtp_buffer);
-  if (pt != self->priv->pt || self->priv->clock_rate <= 0) {
+  if (self->priv->clock_rate <= 0) {
     gchar *msg;
-    if (pt != self->priv->pt) {
-      msg =
-          g_strdup_printf ("Unknown PT: %u, expected: %u", pt, self->priv->pt);
-    } else {
-      msg =
-          g_strdup_printf ("Invalid clock-rate: %d", self->priv->clock_rate);
-    }
+    msg =
+        g_strdup_printf ("Invalid clock-rate: %d", self->priv->clock_rate);
 
     GST_ERROR_OBJECT (self, "%s", msg);
     g_set_error_literal (error, KMS_RTP_SYNC_ERROR, KMS_RTP_SYNC_INVALID_DATA,

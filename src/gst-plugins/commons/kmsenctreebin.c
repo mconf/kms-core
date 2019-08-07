@@ -26,7 +26,7 @@
 #define GST_CAT_DEFAULT kms_enc_tree_bin_debug
 GST_DEBUG_CATEGORY_STATIC (GST_CAT_DEFAULT);
 
-#define LEAKY_TIME 600000000    /*600 ms */
+#define LEAKY_TIME 200000000    /*200 ms */
 #define kms_enc_tree_bin_parent_class parent_class
 G_DEFINE_TYPE (KmsEncTreeBin, kms_enc_tree_bin, KMS_TYPE_TREE_BIN);
 
@@ -47,6 +47,7 @@ typedef enum
   X264,
   OPENH264,
   OPUS,
+  G722,
   UNSUPPORTED
 } EncoderType;
 
@@ -77,6 +78,8 @@ kms_enc_tree_bin_get_name_from_type (EncoderType enc_type)
       return "openh264";
     case OPUS:
       return "opus";
+    case G722:
+      return "g722";
     case UNSUPPORTED:
     default:
       return NULL;
@@ -158,7 +161,7 @@ configure_encoder (GstElement * encoder, EncoderType type, gint target_bitrate,
     {
       /* *INDENT-OFF* */
       g_object_set (G_OBJECT (encoder),
-                    "speed-preset", /* ultrafast */ 1,
+                    "speed-preset", /* veryfast */ 2,
                     "threads", (guint) 1,
                     "bitrate", target_bitrate / 1000,
                     "key-int-max", 60,
@@ -185,6 +188,10 @@ configure_encoder (GstElement * encoder, EncoderType type, gint target_bitrate,
           "perfect-timestamp", TRUE, NULL);
       break;
     }
+    case G722:
+    {
+
+    }
     default:
       GST_DEBUG ("Codec %" GST_PTR_FORMAT
           " not configured because it is not supported", encoder);
@@ -209,6 +216,8 @@ kms_enc_tree_bin_set_encoder_type (KmsEncTreeBin * self)
     self->priv->enc_type = OPENH264;
   } else if (g_str_has_prefix (name, "opusenc")) {
     self->priv->enc_type = OPUS;
+  } else if (g_str_has_prefix (name, "avenc_g722")) {
+    self->priv->enc_type = G722;
   } else {
     self->priv->enc_type = UNSUPPORTED;
   }

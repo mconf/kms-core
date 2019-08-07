@@ -1077,6 +1077,10 @@ void MediaElementImpl::setAudioFormat (std::shared_ptr<AudioCaps> caps)
     str_caps = "audio/x-opus";
     break;
 
+  case AudioCodec::G722:
+    str_caps = "audio/G722";
+    break;
+
   case AudioCodec::PCMU:
     str_caps = "audio/x-mulaw";
     break;

@@ -79,18 +79,22 @@ G_DEFINE_TYPE_WITH_CODE (KmsBaseRtpEndpoint, kms_base_rtp_endpoint,
 #define RTCP_FB_CCM_FIR   SDP_MEDIA_RTCP_FB_CCM " " SDP_MEDIA_RTCP_FB_FIR
 #define RTCP_FB_NACK_PLI  SDP_MEDIA_RTCP_FB_NACK " " SDP_MEDIA_RTCP_FB_PLI
 #define RTCP_FB_PLI SDP_MEDIA_RTCP_FB_PLI
-#define RTCP_FB_FIR_TMMBR SDP_MEDIA_RTCP_FB_FIR_TMMBR
+#define RTCP_FB_CCM_FIR_TMMBR  RTCP_FB_CCM_FIR " " SDP_MEDIA_RTCP_FB_TMMBR
 
 #define DEFAULT_MIN_PORT 1024
 #define DEFAULT_MAX_PORT G_MAXUINT16
 
 #define PICTURE_ID_15_BIT 2
 
+#define DEFAULT_STUN_SERVER_IP NULL
+#define DEFAULT_STUN_SERVER_PORT 3478
+#define DEFAULT_STUN_TURN_URL NULL
+
 #define index_of(str,chr) ({  \
   gint __pos;                 \
   gchar *__c;                 \
   __c = strchr (str, chr);    \
-  __pos = (gint)(__c - str);  \
+  __pos = __c ? (gint)(__c - str) : 0;  \
   __pos;                      \
 })
 
@@ -251,6 +255,13 @@ struct _KmsBaseRtpEndpointPrivate
   KmsRtpSynchronizer *sync_audio;
   KmsRtpSynchronizer *sync_video;
   gboolean perform_video_sync;
+
+  /* Bus */
+  GstBus *bus;
+  int message_handler_id;
+
+  /* DTMF */
+  GstElement *dtmf_depayloader;
 };
 
 /* Signals and args */
@@ -261,6 +272,7 @@ enum
   MEDIA_STATE_CHANGED,
   GET_CONNECTION_STATE,
   CONNECTION_STATE_CHANGED,
+  TELEPHONE_EVENT,
   SIGNAL_REQUEST_LOCAL_KEY_FRAME,
   LAST_SIGNAL
 };
@@ -290,6 +302,9 @@ enum
   PROP_REMB_PARAMS,
   PROP_MIN_PORT,
   PROP_MAX_PORT,
+  PROP_STUN_SERVER_IP,
+  PROP_STUN_SERVER_PORT,
+  PROP_TURN_URL,                /* user:password@address:port?transport=[udp|tcp|tls] */
   PROP_SUPPORT_FEC,
   PROP_OFFER_DIR,
   PROP_LAST
@@ -1601,7 +1616,8 @@ complete_caps_with_fb (GstCaps * caps, const GstSDPMedia * media,
       continue;
     }
 
-    if (sdp_utils_rtcp_fb_attr_check_type (attr, payload, RTCP_FB_FIR_TMMBR)) {
+    if (sdp_utils_rtcp_fb_attr_check_type (attr, payload,
+      RTCP_FB_CCM_FIR_TMMBR)) {
       fir_tmmbr = TRUE;
       continue;
     }
@@ -1739,6 +1755,26 @@ kms_base_rtp_endpoint_get_caps_for_pt (KmsBaseRtpEndpoint * self, guint pt)
   return NULL;
 }
 
+static gboolean
+kms_base_rtp_endpoint_is_telephone_event_caps (GstCaps *caps) {
+
+  GstStructure *structure;
+  gboolean is_telephone_event = FALSE;
+  const gchar *encoding_name;
+
+  if (caps) {
+    structure = gst_caps_get_structure(caps, 0);
+
+    if (gst_structure_has_field(structure, "encoding-name")) {
+      encoding_name = gst_structure_get_string (structure, "encoding-name");
+      is_telephone_event = (g_strcmp0(encoding_name,
+        TELEPHONE_EVENT_ENCONDING_NAME) == 0);
+    }
+  }
+
+  return is_telephone_event;
+}
+
 static GstCaps *
 kms_base_rtp_endpoint_rtpbin_request_pt_map (GstElement * rtpbin, guint session,
     guint pt, KmsBaseRtpEndpoint * self)
@@ -1750,7 +1786,15 @@ kms_base_rtp_endpoint_rtpbin_request_pt_map (GstElement * rtpbin, guint session,
   /* TODO: we will need to use the session if medias share payload numbers */
   caps = kms_base_rtp_endpoint_get_caps_for_pt (self, pt);
 
-  if (caps != NULL) {
+  if (!caps) {
+    caps =
+      gst_caps_new_simple ("application/x-rtp", "payload", G_TYPE_INT, pt,
+      NULL);
+    GST_WARNING_OBJECT (self, "Caps not found pt: %d. Setting: %"GST_PTR_FORMAT,
+    pt, caps);
+  }
+
+  if (!kms_base_rtp_endpoint_is_telephone_event_caps(caps)) {
     KmsRtpSynchronizer *sync = NULL;
 
     if (session == AUDIO_RTP_SESSION) {
@@ -1764,7 +1808,8 @@ kms_base_rtp_endpoint_rtpbin_request_pt_map (GstElement * rtpbin, guint session,
       gint32 clock_rate;
 
       st = gst_caps_get_structure (caps, 0);
-      if (gst_structure_get_int (st, "clock-rate", &clock_rate)) {
+      if (gst_structure_has_field(st,"clock-rate") &&
+        gst_structure_get_int (st, "clock-rate", &clock_rate)) {
         kms_rtp_synchronizer_add_clock_rate_for_pt (sync, pt, clock_rate, NULL);
       } else {
         GST_ERROR_OBJECT (self,
@@ -1808,6 +1853,75 @@ kms_base_rtp_endpoint_update_stats (KmsBaseRtpEndpoint * self,
 }
 
 static void
+kms_base_rtp_endpoint_handle_dtmf_event (KmsBaseRtpEndpoint * self,
+  const GstStructure * message_structure)
+{
+  gint dtmf_number = -1;
+
+  gst_structure_get_int (message_structure, "number", &dtmf_number);
+
+  if (dtmf_number >= 0) {
+   GST_INFO_OBJECT (self,"Received DTMF number: %d", dtmf_number);
+
+   g_signal_emit (G_OBJECT (self), obj_signals[TELEPHONE_EVENT], 0,
+    dtmf_number);
+  }
+
+}
+
+static void
+process_bus_message (GstBus * bus, GstMessage * message, gpointer data)
+{
+  KmsBaseRtpEndpoint *self;
+
+  if (!message || !data || !GST_IS_ELEMENT (data)) {
+      return;
+  }
+
+  self = KMS_BASE_RTP_ENDPOINT (data);
+
+  if (g_strcmp0 (GST_OBJECT_NAME (message->src),
+    GST_OBJECT_NAME(self->priv->dtmf_depayloader)) != 0) {
+    return;
+  }
+
+  const GstStructure *message_structure = gst_message_get_structure (message);
+  const char *message_name = gst_structure_get_name (message_structure);
+
+  if (message_structure && message_name &&
+    g_str_has_prefix (message_name, "dtmf-event")) {
+
+    kms_base_rtp_endpoint_handle_dtmf_event(self, message_structure);
+  }
+}
+
+static void
+kms_base_rtp_endpoint_update_dtmf_depayloader_output (KmsBaseRtpEndpoint * self,
+  GstElement *dtmf_depayloader)
+{
+  GstElement *fakesink = gst_element_factory_make("fakesink", NULL);
+
+  g_object_set (fakesink, "async", FALSE, "sync", FALSE, NULL);
+
+  gst_bin_add (GST_BIN (self), fakesink);
+
+  gst_element_link (dtmf_depayloader, fakesink);
+  gst_element_sync_state_with_parent (fakesink);
+
+  GstElement *pipeline =
+    GST_ELEMENT(gst_element_get_parent (GST_ELEMENT(self)));
+
+  KMS_ELEMENT_LOCK (self);
+  self->priv->bus = gst_pipeline_get_bus (GST_PIPELINE (pipeline));
+  self->priv->dtmf_depayloader = dtmf_depayloader;
+  self->priv->message_handler_id =
+    g_signal_connect (G_OBJECT (self->priv->bus), "message",
+    G_CALLBACK (process_bus_message), self);
+
+  KMS_ELEMENT_UNLOCK (self);
+}
+
+static void
 kms_base_rtp_endpoint_rtpbin_pad_added (GstElement * rtpbin, GstPad * pad,
     KmsBaseRtpEndpoint * self)
 {
@@ -1845,9 +1959,21 @@ kms_base_rtp_endpoint_rtpbin_pad_added (GstElement * rtpbin, GstPad * pad,
   if (depayloader != NULL) {
     GST_DEBUG_OBJECT (self, "Found depayloader %" GST_PTR_FORMAT, depayloader);
     kms_base_rtp_endpoint_update_stats (self, depayloader, media);
+
+    GstElement *queue = gst_element_factory_make ("queue", NULL);
+    g_object_set (queue, "leaky", 2, NULL);
+    gst_bin_add (GST_BIN(self), queue);
+
     gst_bin_add (GST_BIN (self), depayloader);
-    gst_element_link_pads (depayloader, "src", agnostic, "sink");
-    gst_element_link_pads (rtpbin, GST_OBJECT_NAME (pad), depayloader, "sink");
+    if (g_str_has_prefix (GST_OBJECT_NAME (depayloader), "rtpdtmfdepay")) {
+      kms_base_rtp_endpoint_update_dtmf_depayloader_output (self, depayloader);
+    } else {
+      kms_utils_depayloader_monitor_pts_out (depayloader);
+      gst_element_link_pads (depayloader, "src", agnostic, "sink");
+    }
+    gst_element_link_pads (rtpbin, GST_OBJECT_NAME (pad), queue, "sink");
+    gst_element_link (queue, depayloader);
+    gst_element_sync_state_with_parent (queue);
     gst_element_sync_state_with_parent (depayloader);
   } else {
     GstElement *fake = gst_element_factory_make ("fakesink", NULL);
@@ -2331,6 +2457,17 @@ kms_base_rtp_endpoint_set_property (GObject * object, guint property_id,
       self->priv->max_port = v;
       break;
     }
+    case PROP_STUN_SERVER_IP:
+      g_free (self->stun_server_ip);
+      self->stun_server_ip = g_value_dup_string (value);
+      break;
+    case PROP_STUN_SERVER_PORT:
+      self->stun_server_port = g_value_get_uint (value);
+      break;
+    case PROP_TURN_URL:
+      g_free (self->turn_url);
+      self->turn_url = g_value_dup_string (value);
+      break;
     case PROP_OFFER_DIR:
       self->priv->offer_dir = g_value_get_enum (value);
       break;
@@ -2397,6 +2534,15 @@ kms_base_rtp_endpoint_get_property (GObject * object, guint property_id,
     case PROP_MAX_PORT:
       g_value_set_uint (value, self->priv->max_port);
       break;
+    case PROP_STUN_SERVER_IP:
+      g_value_set_string (value, self->stun_server_ip);
+      break;
+    case PROP_STUN_SERVER_PORT:
+      g_value_set_uint (value, self->stun_server_port);
+      break;
+    case PROP_TURN_URL:
+      g_value_set_string (value, self->turn_url);
+      break;
     case PROP_SUPPORT_FEC:
       g_value_set_boolean (value, self->priv->support_fec);
       break;
@@ -2406,6 +2552,22 @@ kms_base_rtp_endpoint_get_property (GObject * object, guint property_id,
   }
 
   KMS_ELEMENT_UNLOCK (self);
+}
+
+static void
+kms_base_rtp_endpoint_remove_bus (KmsBaseRtpEndpoint *self) {
+  KMS_ELEMENT_LOCK(self);
+
+  if (self->priv->bus && self->priv->message_handler_id) {
+    g_signal_handler_disconnect (self->priv->bus,
+      self->priv->message_handler_id);
+
+    g_object_unref(self->priv->bus);
+    self->priv->bus = NULL;
+    self->priv->message_handler_id = 0;
+  }
+
+  KMS_ELEMENT_UNLOCK(self);
 }
 
 static void
@@ -2428,6 +2590,8 @@ kms_base_rtp_endpoint_dispose (GObject * gobject)
     g_signal_emit (G_OBJECT (self), obj_signals[MEDIA_STOP], 0,
         KMS_MEDIA_TYPE_VIDEO, TRUE);
   }
+
+  kms_base_rtp_endpoint_remove_bus(self);
 
   rtp_media_config_unref (self->priv->audio_config);
   rtp_media_config_unref (self->priv->video_config);
@@ -2493,6 +2657,9 @@ kms_base_rtp_endpoint_finalize (GObject * gobject)
 
   g_clear_object (&self->priv->sync_audio);
   g_clear_object (&self->priv->sync_video);
+
+  g_free (self->stun_server_ip);
+  g_free (self->turn_url);
 
   G_OBJECT_CLASS (kms_base_rtp_endpoint_parent_class)->finalize (gobject);
 }
@@ -2850,6 +3017,27 @@ kms_base_rtp_endpoint_class_init (KmsBaseRtpEndpointClass * klass)
           0, G_MAXUINT16, DEFAULT_MAX_PORT,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
+  g_object_class_install_property (object_class, PROP_STUN_SERVER_IP,
+      g_param_spec_string ("stun-server",
+          "StunServer",
+          "Stun Server IP Address",
+          DEFAULT_STUN_SERVER_IP, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+  g_object_class_install_property (object_class, PROP_STUN_SERVER_PORT,
+      g_param_spec_uint ("stun-server-port",
+          "StunServerPort",
+          "Stun Server Port",
+          1, G_MAXUINT16, DEFAULT_STUN_SERVER_PORT,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+  g_object_class_install_property (object_class, PROP_TURN_URL,
+      g_param_spec_string ("turn-url",
+          "TurnUrl",
+          "TURN server URL with this format: 'user:password@address:port(?transport=[udp|tcp|tls])'."
+          "'address' must be an IP (not a domain)."
+          "'transport' is optional (UDP by default).",
+          DEFAULT_STUN_TURN_URL, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
   g_object_class_install_property (object_class, PROP_SUPPORT_FEC,
       g_param_spec_boolean ("support-fec", "Forward error correction supported",
           "Forward error correction supported", FALSE,
@@ -2902,6 +3090,13 @@ kms_base_rtp_endpoint_class_init (KmsBaseRtpEndpointClass * klass)
       G_SIGNAL_ACTION | G_SIGNAL_RUN_LAST,
       G_STRUCT_OFFSET (KmsBaseRtpEndpointClass, request_local_key_frame), NULL,
       NULL, __kms_core_marshal_BOOLEAN__VOID, G_TYPE_BOOLEAN, 0);
+
+  obj_signals[TELEPHONE_EVENT] =
+      g_signal_new ("telephone-event",
+      G_TYPE_FROM_CLASS (klass),
+      G_SIGNAL_RUN_LAST,
+      G_STRUCT_OFFSET (KmsBaseRtpEndpointClass, telephone_event), NULL,
+      NULL, NULL, G_TYPE_NONE, 1, G_TYPE_INT);
 
   g_type_class_add_private (klass, sizeof (KmsBaseRtpEndpointPrivate));
 
@@ -3281,6 +3476,10 @@ kms_base_rtp_endpoint_init (KmsBaseRtpEndpoint * self)
   self->priv->min_video_recv_bw = MIN_VIDEO_RECV_BW_DEFAULT;
   self->priv->min_video_send_bw = MIN_VIDEO_SEND_BW_DEFAULT;
   self->priv->max_video_send_bw = MAX_VIDEO_SEND_BW_DEFAULT;
+
+  self->stun_server_ip = DEFAULT_STUN_SERVER_IP;
+  self->stun_server_port = DEFAULT_STUN_SERVER_PORT;
+  self->turn_url = DEFAULT_STUN_TURN_URL;
 
   self->priv->rtpbin = gst_element_factory_make ("rtpbin", NULL);
 

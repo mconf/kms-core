@@ -52,6 +52,11 @@ struct _KmsBaseRtpEndpoint
   KmsBaseSdpEndpoint parent;
 
   KmsBaseRtpEndpointPrivate *priv;
+
+  /* STUN/TURN config */
+  gchar *stun_server_ip;
+  guint stun_server_port;
+  gchar *turn_url;
 };
 
 struct _KmsBaseRtpEndpointClass
@@ -66,6 +71,7 @@ struct _KmsBaseRtpEndpointClass
 
   KmsConnectionState (*get_connection_state) (KmsBaseRtpEndpoint * self, const gchar * sess_id);
   void (*connection_state_changed) (KmsBaseRtpEndpoint * self, KmsConnectionState new_state);
+  void (*telephone_event) (KmsBaseRtpEndpoint * self, gint dtmf_digit);
 
   gboolean (*request_local_key_frame) (KmsBaseRtpEndpoint * self);
 };
