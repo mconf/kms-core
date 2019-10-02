@@ -480,8 +480,6 @@ MediaElementImpl::mediaFlowOutStateChange (gboolean isFlowing, gchar *padName,
     MediaFlowOutStateChange event (shared_from_this(),
                                    MediaFlowOutStateChange::getName (),
                                    state, padName, padTypeToMediaType (type));
-
-    std::unique_lock<std::recursive_mutex> sigcLock (sigcMutex);
     signalMediaFlowOutStateChange (event);
   } catch (std::bad_weak_ptr &e) {
   }
@@ -514,8 +512,6 @@ MediaElementImpl::mediaFlowInStateChange (gboolean isFlowing, gchar *padName,
     MediaFlowInStateChange event (shared_from_this(),
                                   MediaFlowInStateChange::getName (),
                                   state, padName, padTypeToMediaType (type));
-
-    std::unique_lock<std::recursive_mutex> sigcLock (sigcMutex);
     signalMediaFlowInStateChange (event);
   } catch (std::bad_weak_ptr &e) {
   }
@@ -550,8 +546,6 @@ MediaElementImpl::onMediaTranscodingStateChange (gboolean isTranscoding,
     MediaTranscodingStateChange event (shared_from_this(),
                                        MediaTranscodingStateChange::getName (),
                                        state, binName, padTypeToMediaType (type));
-
-    std::unique_lock<std::recursive_mutex> sigcLock (sigcMutex);
     signalMediaTranscodingStateChange (event);
   } catch (std::bad_weak_ptr &e) {
     GST_WARNING_OBJECT (element, "Cannot emit event: MediaTranscodingStateChange");
@@ -948,8 +942,6 @@ void MediaElementImpl::connect (std::shared_ptr<MediaElement> sink,
                                      ElementConnected::getName (),
                                      sink, mediaType, sourceMediaDescription,
                                      sinkMediaDescription);
-
-  std::unique_lock<std::recursive_mutex> sigcLock (sigcMutex);
   signalElementConnected (elementConnected);
 }
 
@@ -1070,8 +1062,6 @@ void MediaElementImpl::disconnect (std::shared_ptr<MediaElement> sink,
       ElementDisconnected::getName (),
       sink, mediaType, sourceMediaDescription,
       sinkMediaDescription);
-
-  std::unique_lock<std::recursive_mutex> sigcLock (sigcMutex);
   signalElementDisconnected (elementDisconnected);
 }
 
