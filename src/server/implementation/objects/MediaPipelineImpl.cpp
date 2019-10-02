@@ -78,10 +78,10 @@ MediaPipelineImpl::processBusMessage (GstMessage *msg)
 
   try {
     gint code = err_code;
-    Error event (shared_from_this(), errorMessage, code,
+    Error error (shared_from_this(), errorMessage, code,
                  "UNEXPECTED_PIPELINE_ERROR");
 
-    sigcSignalEmit(signalError, event);
+    signalError (error);
   } catch (std::bad_weak_ptr &e) {
   }
 

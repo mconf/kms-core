@@ -480,8 +480,7 @@ MediaElementImpl::mediaFlowOutStateChange (gboolean isFlowing, gchar *padName,
     MediaFlowOutStateChange event (shared_from_this(),
                                    MediaFlowOutStateChange::getName (),
                                    state, padName, padTypeToMediaType (type));
-
-    sigcSignalEmit(signalMediaFlowOutStateChange, event);
+    signalMediaFlowOutStateChange (event);
   } catch (std::bad_weak_ptr &e) {
   }
 }
@@ -513,8 +512,7 @@ MediaElementImpl::mediaFlowInStateChange (gboolean isFlowing, gchar *padName,
     MediaFlowInStateChange event (shared_from_this(),
                                   MediaFlowInStateChange::getName (),
                                   state, padName, padTypeToMediaType (type));
-
-    sigcSignalEmit(signalMediaFlowInStateChange, event);
+    signalMediaFlowInStateChange (event);
   } catch (std::bad_weak_ptr &e) {
   }
 }
@@ -548,8 +546,7 @@ MediaElementImpl::onMediaTranscodingStateChange (gboolean isTranscoding,
     MediaTranscodingStateChange event (shared_from_this(),
                                        MediaTranscodingStateChange::getName (),
                                        state, binName, padTypeToMediaType (type));
-
-    sigcSignalEmit(signalMediaTranscodingStateChange, event);
+    signalMediaTranscodingStateChange (event);
   } catch (std::bad_weak_ptr &e) {
     GST_WARNING_OBJECT (element, "Cannot emit event: MediaTranscodingStateChange");
   }
@@ -941,12 +938,11 @@ void MediaElementImpl::connect (std::shared_ptr<MediaElement> sink,
   sinkLock.unlock();
   lock.unlock ();
 
-  ElementConnected event (shared_from_this(),
+  ElementConnected elementConnected (shared_from_this(),
                                      ElementConnected::getName (),
                                      sink, mediaType, sourceMediaDescription,
                                      sinkMediaDescription);
-
-  sigcSignalEmit(signalElementConnected, event);
+  signalElementConnected (elementConnected);
 }
 
 void
@@ -1062,12 +1058,11 @@ void MediaElementImpl::disconnect (std::shared_ptr<MediaElement> sink,
   sinkLock.unlock();
   lock.unlock ();
 
-  ElementDisconnected event (shared_from_this(),
+  ElementDisconnected elementDisconnected (shared_from_this(),
       ElementDisconnected::getName (),
       sink, mediaType, sourceMediaDescription,
       sinkMediaDescription);
-
-  sigcSignalEmit(signalElementDisconnected, event);
+  signalElementDisconnected (elementDisconnected);
 }
 
 void MediaElementImpl::setAudioFormat (std::shared_ptr<AudioCaps> caps)

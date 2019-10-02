@@ -212,8 +212,7 @@ UriEndpointImpl::stateChanged (guint new_state)
 
   UriEndpointStateChanged event (shared_from_this(),
                                  UriEndpointStateChanged::getName(), state);
-
-  sigcSignalEmit(signalUriEndpointStateChanged, event);
+  signalUriEndpointStateChanged (event);
 }
 
 UriEndpointImpl::StaticConstructor UriEndpointImpl::staticConstructor;
