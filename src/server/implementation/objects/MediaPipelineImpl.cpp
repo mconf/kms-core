@@ -76,14 +76,13 @@ MediaPipelineImpl::processBusMessage (GstMessage *msg)
     errorMessage += " (" + std::string (dbg_info) + ")";
   }
 
-  gint code = err_code;
   try {
-    Error event (shared_from_this (), errorMessage, code,
-        "UNEXPECTED_PIPELINE_ERROR");
+    gint code = err_code;
+    Error event (shared_from_this(), errorMessage, code,
+                 "UNEXPECTED_PIPELINE_ERROR");
+
     sigcSignalEmit(signalError, event);
-  } catch (const std::bad_weak_ptr &e) {
-    // shared_from_this()
-    GST_ERROR ("BUG creating %s: %s", Error::getName ().c_str (), e.what ());
+  } catch (std::bad_weak_ptr &e) {
   }
 
   gchar *dot_name = g_strdup_printf ("%s_bus_%d", GST_DEFAULT_NAME, err_code);

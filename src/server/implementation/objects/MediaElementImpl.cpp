@@ -477,14 +477,12 @@ MediaElementImpl::mediaFlowOutStateChange (gboolean isFlowing, gchar *padName,
   mediaFlowOutStates[key] = state;
 
   try {
-    MediaFlowOutStateChange event (shared_from_this (),
-        MediaFlowOutStateChange::getName (), state, padName,
-        padTypeToMediaType (type));
+    MediaFlowOutStateChange event (shared_from_this(),
+                                   MediaFlowOutStateChange::getName (),
+                                   state, padName, padTypeToMediaType (type));
+
     sigcSignalEmit(signalMediaFlowOutStateChange, event);
-  } catch (const std::bad_weak_ptr &e) {
-    // shared_from_this()
-    GST_ERROR ("BUG creating %s: %s",
-        MediaFlowOutStateChange::getName ().c_str (), e.what ());
+  } catch (std::bad_weak_ptr &e) {
   }
 }
 
@@ -512,14 +510,12 @@ MediaElementImpl::mediaFlowInStateChange (gboolean isFlowing, gchar *padName,
   mediaFlowInStates[key] = state;
 
   try {
-    MediaFlowInStateChange event (shared_from_this (),
-        MediaFlowInStateChange::getName (), state, padName,
-        padTypeToMediaType (type));
+    MediaFlowInStateChange event (shared_from_this(),
+                                  MediaFlowInStateChange::getName (),
+                                  state, padName, padTypeToMediaType (type));
+
     sigcSignalEmit(signalMediaFlowInStateChange, event);
-  } catch (const std::bad_weak_ptr &e) {
-    // shared_from_this()
-    GST_ERROR ("BUG creating %s: %s",
-        MediaFlowInStateChange::getName ().c_str (), e.what ());
+  } catch (std::bad_weak_ptr &e) {
   }
 }
 
@@ -549,20 +545,13 @@ MediaElementImpl::onMediaTranscodingStateChange (gboolean isTranscoding,
   mediaTranscodingStates[key] = state;
 
   try {
+    MediaTranscodingStateChange event (shared_from_this(),
+                                       MediaTranscodingStateChange::getName (),
+                                       state, binName, padTypeToMediaType (type));
 
+    sigcSignalEmit(signalMediaTranscodingStateChange, event);
   } catch (std::bad_weak_ptr &e) {
     GST_WARNING_OBJECT (element, "Cannot emit event: MediaTranscodingStateChange");
-  }
-
-  try {
-    MediaTranscodingStateChange event (shared_from_this (),
-        MediaTranscodingStateChange::getName (), state, binName,
-        padTypeToMediaType (type));
-    sigcSignalEmit(signalMediaTranscodingStateChange, event);
-  } catch (const std::bad_weak_ptr &e) {
-    // shared_from_this()
-    GST_ERROR ("BUG creating %s: %s",
-        MediaTranscodingStateChange::getName ().c_str (), e.what ());
   }
 }
 
@@ -952,16 +941,12 @@ void MediaElementImpl::connect (std::shared_ptr<MediaElement> sink,
   sinkLock.unlock();
   lock.unlock ();
 
-  try {
-    ElementConnected event (shared_from_this (),
-        ElementConnected::getName (), sink, mediaType, sourceMediaDescription,
-        sinkMediaDescription);
-    sigcSignalEmit(signalElementConnected, event);
-  } catch (const std::bad_weak_ptr &e) {
-    // shared_from_this()
-    GST_ERROR ("BUG creating %s: %s", ElementConnected::getName ().c_str (),
-        e.what ());
-  }
+  ElementConnected event (shared_from_this(),
+                                     ElementConnected::getName (),
+                                     sink, mediaType, sourceMediaDescription,
+                                     sinkMediaDescription);
+
+  sigcSignalEmit(signalElementConnected, event);
 }
 
 void
@@ -1077,16 +1062,12 @@ void MediaElementImpl::disconnect (std::shared_ptr<MediaElement> sink,
   sinkLock.unlock();
   lock.unlock ();
 
-  try {
-    ElementDisconnected event (shared_from_this (),
-        ElementDisconnected::getName (), sink, mediaType,
-        sourceMediaDescription, sinkMediaDescription);
-    sigcSignalEmit(signalElementDisconnected, event);
-  } catch (const std::bad_weak_ptr &e) {
-    // shared_from_this()
-    GST_ERROR ("BUG creating %s: %s", ElementDisconnected::getName ().c_str (),
-        e.what ());
-  }
+  ElementDisconnected event (shared_from_this(),
+      ElementDisconnected::getName (),
+      sink, mediaType, sourceMediaDescription,
+      sinkMediaDescription);
+
+  sigcSignalEmit(signalElementDisconnected, event);
 }
 
 void MediaElementImpl::setAudioFormat (std::shared_ptr<AudioCaps> caps)
