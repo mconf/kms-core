@@ -37,8 +37,8 @@
 #define KEYFRAME_INTERVAL "keyframe-interval"
 #define DEFAULT_KEYFRAME_TIMEOUT_TAG 0
 
-#define DEFAULT_MIN_BITRATE 0
-#define DEFAULT_MAX_BITRATE G_MAXINT
+#define DEFAULT_MIN_OUTPUT_BITRATE 0
+#define DEFAULT_MAX_OUTPUT_BITRATE G_MAXINT
 #define MEDIA_FLOW_INTERNAL_TIME_MSEC 2000
 #define DEFAULT_KEYFRAME_INTERVAL 0
 
@@ -157,10 +157,10 @@ struct _KmsElementPrivate
 
   GHashTable *pendingpads;
 
-  gint min_bitrate;
-  gint max_bitrate;
   gint keyframe_interval;
   gint keyframe_interval_timeout_tag;
+  gint min_output_bitrate;
+  gint max_output_bitrate;
 
   GstStructure *codec_config;
 
@@ -189,8 +189,8 @@ enum
   PROP_ACCEPT_EOS,
   PROP_AUDIO_CAPS,
   PROP_VIDEO_CAPS,
-  PROP_MIN_BITRATE,
-  PROP_MAX_BITRATE,
+  PROP_MIN_OUTPUT_BITRATE,
+  PROP_MAX_OUTPUT_BITRATE,
   PROP_MEDIA_STATS,
   PROP_CODEC_CONFIG,
   PROP_KEYFRAME_INTERVAL,
@@ -700,10 +700,10 @@ kms_element_set_video_output_properties (KmsElement * self,
       self->priv->codec_config);
 
   KMS_SET_OBJECT_PROPERTY_SAFELY (element, MAX_BITRATE,
-      self->priv->max_bitrate);
+      self->priv->max_output_bitrate);
 
   KMS_SET_OBJECT_PROPERTY_SAFELY (element, MIN_BITRATE,
-      self->priv->min_bitrate);
+      self->priv->min_output_bitrate);
 
   KMS_SET_OBJECT_PROPERTY_SAFELY (element, KEYFRAME_INTERVAL,
       self->priv->keyframe_interval);
@@ -1216,23 +1216,23 @@ kms_element_endpoint_get_caps (KmsElement * self, GstCaps * caps)
 }
 
 static void
-set_min_bitrate (gchar * id, KmsOutputElementData * odata, KmsElement * self)
+set_min_output_bitrate (gchar * id, KmsOutputElementData * odata, KmsElement * self)
 {
   if (odata->type == KMS_ELEMENT_PAD_TYPE_VIDEO) {
     if (odata->element != NULL) {
       KMS_SET_OBJECT_PROPERTY_SAFELY (odata->element, MIN_BITRATE,
-          self->priv->min_bitrate);
+          self->priv->min_output_bitrate);
     }
   }
 }
 
 static void
-set_max_bitrate (gchar * id, KmsOutputElementData * odata, KmsElement * self)
+set_max_output_bitrate (gchar * id, KmsOutputElementData * odata, KmsElement * self)
 {
   if (odata->type == KMS_ELEMENT_PAD_TYPE_VIDEO) {
     if (odata->element != NULL) {
       KMS_SET_OBJECT_PROPERTY_SAFELY (odata->element, MAX_BITRATE,
-          self->priv->max_bitrate);
+          self->priv->max_output_bitrate);
     }
   }
 }
@@ -1277,34 +1277,33 @@ kms_element_set_property (GObject * object, guint property_id,
       kms_element_endpoint_set_caps (self, gst_value_get_caps (value),
           &self->priv->video_caps);
       break;
-    case PROP_MIN_BITRATE:{
+    case PROP_MIN_OUTPUT_BITRATE:{
       gint v = g_value_get_int (value);
 
       KMS_ELEMENT_LOCK (self);
-      if (v > self->priv->max_bitrate) {
-        v = self->priv->max_bitrate;
-        GST_WARNING_OBJECT (self,
-            "Setting min-bitrate bigger than max-bitrate");
+      if (v > self->priv->max_output_bitrate) {
+        v = self->priv->max_output_bitrate;
+        GST_WARNING_OBJECT (self, "Trying to set min > max. Setting %d", v);
       }
 
-      self->priv->min_bitrate = v;
+      self->priv->min_output_bitrate = v;
       g_hash_table_foreach (self->priv->output_elements,
-          (GHFunc) set_min_bitrate, self);
+          (GHFunc) set_min_output_bitrate, self);
       KMS_ELEMENT_UNLOCK (self);
       break;
     }
-    case PROP_MAX_BITRATE:{
+    case PROP_MAX_OUTPUT_BITRATE:{
       gint v = g_value_get_int (value);
 
       KMS_ELEMENT_LOCK (self);
-      if (v < self->priv->min_bitrate) {
-        v = self->priv->min_bitrate;
+      if (v < self->priv->min_output_bitrate) {
+        v = self->priv->min_output_bitrate;
 
-        GST_WARNING_OBJECT (self, "Setting max-bitrate less than min-bitrate");
+        GST_WARNING_OBJECT (self, "Trying to set max < min. Setting %d", v);
       }
-      self->priv->max_bitrate = v;
+      self->priv->max_output_bitrate = v;
       g_hash_table_foreach (self->priv->output_elements,
-          (GHFunc) set_max_bitrate, self);
+          (GHFunc) set_max_output_bitrate, self);
       KMS_ELEMENT_UNLOCK (self);
       break;
     }
@@ -1367,14 +1366,14 @@ kms_element_get_property (GObject * object, guint property_id,
       g_value_take_boxed (value, kms_element_endpoint_get_caps (self,
               self->priv->video_caps));
       break;
-    case PROP_MIN_BITRATE:
+    case PROP_MIN_OUTPUT_BITRATE:
       KMS_ELEMENT_LOCK (self);
-      g_value_set_int (value, self->priv->min_bitrate);
+      g_value_set_int (value, self->priv->min_output_bitrate);
       KMS_ELEMENT_UNLOCK (self);
       break;
-    case PROP_MAX_BITRATE:
+    case PROP_MAX_OUTPUT_BITRATE:
       KMS_ELEMENT_LOCK (self);
-      g_value_set_int (value, self->priv->max_bitrate);
+      g_value_set_int (value, self->priv->max_output_bitrate);
       KMS_ELEMENT_UNLOCK (self);
       break;
     case PROP_MEDIA_STATS:
@@ -1900,15 +1899,15 @@ kms_element_class_init (KmsElementClass * klass)
           "The allowed caps for video", GST_TYPE_CAPS,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
-  g_object_class_install_property (gobject_class, PROP_MIN_BITRATE,
+  g_object_class_install_property (gobject_class, PROP_MIN_OUTPUT_BITRATE,
       g_param_spec_int ("min-output-bitrate", "min output bitrate",
           "Configure the minimum oputput bitrate to media encoding",
-          0, G_MAXINT, DEFAULT_MIN_BITRATE, G_PARAM_READWRITE));
+          0, G_MAXINT, DEFAULT_MIN_OUTPUT_BITRATE, G_PARAM_READWRITE));
 
-  g_object_class_install_property (gobject_class, PROP_MAX_BITRATE,
+  g_object_class_install_property (gobject_class, PROP_MAX_OUTPUT_BITRATE,
       g_param_spec_int ("max-output-bitrate", "max output bitrate",
           "Configure the maximum output bitrate to media encoding",
-          0, G_MAXINT, DEFAULT_MAX_BITRATE, G_PARAM_READWRITE));
+          0, G_MAXINT, DEFAULT_MAX_OUTPUT_BITRATE, G_PARAM_READWRITE));
 
   g_object_class_install_property (gobject_class, PROP_MEDIA_STATS,
       g_param_spec_boolean ("media-stats", "Media stats",
@@ -2011,10 +2010,10 @@ kms_element_init (KmsElement * element)
 
   element->priv->accept_eos = DEFAULT_ACCEPT_EOS;
 
-  element->priv->min_bitrate = DEFAULT_MIN_BITRATE;
-  element->priv->max_bitrate = DEFAULT_MAX_BITRATE;
   element->priv->keyframe_interval = DEFAULT_KEYFRAME_INTERVAL;
   element->priv->keyframe_interval_timeout_tag = DEFAULT_KEYFRAME_TIMEOUT_TAG;
+  element->priv->min_output_bitrate = DEFAULT_MIN_OUTPUT_BITRATE;
+  element->priv->max_output_bitrate = DEFAULT_MAX_OUTPUT_BITRATE;
 
   element->priv->pendingpads = g_hash_table_new_full (g_str_hash, g_str_equal,
       g_free, (GDestroyNotify) destroy_pendingpads);

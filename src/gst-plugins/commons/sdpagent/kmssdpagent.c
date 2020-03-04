@@ -1814,7 +1814,9 @@ kms_sdp_agent_process_answered_description (KmsSdpAgent * agent,
 
     if (item == NULL) {
       GST_ERROR_OBJECT (agent, "No handler for media at position %u", index);
-      g_assert_not_reached ();
+      // FIXME review this assert and decide what to do in this case
+      //g_assert_not_reached ();
+      continue;
     }
 
     handler = item->data;

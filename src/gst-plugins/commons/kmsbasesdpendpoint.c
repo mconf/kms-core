@@ -45,7 +45,7 @@ static gboolean kms_base_sdp_endpoint_init_sdp_handlers (KmsBaseSdpEndpoint *
     self, KmsSdpSession * sess);
 
 #define USE_IPV6_DEFAULT FALSE
-#define MAX_VIDEO_RECV_BW_DEFAULT 500
+#define MAX_VIDEO_RECV_BW_DEFAULT 0
 #define MAX_AUDIO_RECV_BW_DEFAULT 0
 
 #define GST_VALUE_HOLDS_STRUCTURE(x)            (G_VALUE_HOLDS((x), _gst_structure_type))
@@ -96,6 +96,7 @@ struct _KmsBaseSdpEndpointPrivate
   gint next_session_id;
   GHashTable *sessions;
   GstSDPMessage *first_neg_sdp;
+  GstSDPMessage *first_local_sdp;
 
   gboolean bundle;
   gboolean use_ipv6;
@@ -433,7 +434,6 @@ kms_base_sdp_endpoint_init_sdp_handlers (KmsBaseSdpEndpoint * self,
 {
   GError *err = NULL;
   gint gid;
-  int i;
 
   gid = -1;
   if (self->priv->bundle) {
@@ -446,7 +446,7 @@ kms_base_sdp_endpoint_init_sdp_handlers (KmsBaseSdpEndpoint * self,
     }
   }
 
-  for (i = 0; i < self->priv->num_audio_medias; i++) {
+  for (guint i = 0; i < self->priv->num_audio_medias; i++) {
     if (!kms_base_sdp_endpoint_add_handler (self, sess, "audio", gid,
             self->priv->max_audio_recv_bw)) {
       return FALSE;
@@ -454,7 +454,7 @@ kms_base_sdp_endpoint_init_sdp_handlers (KmsBaseSdpEndpoint * self,
     self->priv->audio_handlers++;
   }
 
-  for (i = 0; i < self->priv->num_video_medias; i++) {
+  for (guint i = 0; i < self->priv->num_video_medias; i++) {
     if (!kms_base_sdp_endpoint_add_handler (self, sess, "video", gid,
             self->priv->max_video_recv_bw)) {
       return FALSE;
@@ -584,6 +584,10 @@ kms_base_sdp_endpoint_generate_offer (KmsBaseSdpEndpoint * self,
 
   offer = kms_sdp_session_generate_offer (sess);
 
+  if (self->priv->first_local_sdp == NULL && offer) {
+    gst_sdp_message_copy (offer, &self->priv->first_local_sdp);
+  }
+
 end:
   KMS_ELEMENT_UNLOCK (self);
 
@@ -629,6 +633,10 @@ kms_base_sdp_endpoint_process_offer (KmsBaseSdpEndpoint * self,
     goto end;
   }
 
+  if (self->priv->first_local_sdp == NULL && answer) {
+    gst_sdp_message_copy (answer, &self->priv->first_local_sdp);
+  }
+
   if (self->priv->first_neg_sdp == NULL && sess->neg_sdp) {
     gst_sdp_message_copy (sess->neg_sdp, &self->priv->first_neg_sdp);
   }
@@ -669,6 +677,18 @@ kms_base_sdp_endpoint_process_answer (KmsBaseSdpEndpoint * self,
   kms_base_sdp_endpoint_start_media (self, sess, TRUE);
 
 end:
+  KMS_ELEMENT_UNLOCK (self);
+
+  return ret;
+}
+
+const GstSDPMessage *
+kms_base_sdp_endpoint_get_first_local_sdp (KmsBaseSdpEndpoint * self)
+{
+  const GstSDPMessage *ret;
+
+  KMS_ELEMENT_LOCK (self);
+  ret = self->priv->first_local_sdp;
   KMS_ELEMENT_UNLOCK (self);
 
   return ret;
@@ -873,6 +893,10 @@ kms_base_sdp_endpoint_finalize (GObject * object)
 
   if (self->priv->first_neg_sdp != NULL) {
     gst_sdp_message_free (self->priv->first_neg_sdp);
+  }
+
+  if (self->priv->first_local_sdp != NULL) {
+    gst_sdp_message_free (self->priv->first_local_sdp);
   }
 
   if (self->priv->audio_codecs != NULL) {

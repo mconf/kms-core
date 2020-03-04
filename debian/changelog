@@ -1,8 +1,18 @@
-kms-core (6.11.1-0kurento1) UNRELEASED; urgency=medium
+kms-core (6.13.0-0kurento1) testing; urgency=medium
 
-  * UNRELEASED
+  * Prepare release 6.13.0-0kurento1
+  * debian/control: Add missing dependency
+  * fixup! debian/control: Add missing dependency
+  * debian/control: Add build-essential to Build-Depends
 
- -- Juan Navarro <juan.navarro@gmx.es>  Fri, 26 Jul 2019 12:03:24 +0200
+ -- Juan Navarro <juan.navarro@gmx.es>  Tue, 17 Dec 2019 13:37:54 +0100
+
+kms-core (6.12.0-0kurento1) testing; urgency=medium
+
+  * Prepare release 6.12.0-0kurento1
+  * debian: Follow FHS, create kurento home dir in /var/lib/kurento
+
+ -- Juan Navarro <juan.navarro@gmx.es>  Mon, 14 Oct 2019 19:12:34 +0200
 
 kms-core (6.11.0-0kurento1) testing; urgency=medium
 
