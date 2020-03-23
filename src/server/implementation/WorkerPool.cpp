@@ -26,6 +26,7 @@ GST_DEBUG_CATEGORY_STATIC (GST_CAT_DEFAULT);
 #define GST_DEFAULT_NAME "KurentoWorkerPool"
 
 const int WORKER_THREADS_TIMEOUT = 3; /* seconds */
+const int WORKER_POOL_MAX_WORKERS = 2;
 
 namespace kurento
 {
@@ -152,15 +153,20 @@ WorkerPool::checkWorkers ()
       return;
     }
 
-    GST_WARNING ("Worker threads locked. Spawning a new one.");
+    if (workers.size() < WORKER_POOL_MAX_WORKERS) {
+      GST_WARNING ("Worker threads locked. Spawning a new one. Current workers: %zu", workers.size());
 
-    std::unique_lock <std::mutex> lock (mutex);
+      std::unique_lock <std::mutex> lock (mutex);
 
-    if (!terminated) {
-      workers.emplace_back(std::bind(&workerThreadLoop, io_service));
+      if (!terminated) {
+        workers.emplace_back(std::bind(&workerThreadLoop, io_service));
+      }
+
+      lock.unlock();
+    } else {
+      GST_WARNING ("ERROR: Watcher failed and worker pool limit reached, no thread will be spawned.");
+      return;
     }
-
-    lock.unlock();
   });
 }
 
