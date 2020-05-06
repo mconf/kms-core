@@ -231,7 +231,7 @@ kms_enc_tree_bin_create_encoder_for_caps (KmsEncTreeBin * self,
   for (l = encoder_list; l != NULL; l = l->next) {
     encoder_factory = GST_ELEMENT_FACTORY (l->data);
 
-    if (g_str_has_prefix (GST_OBJECT_NAME (encoder_factory), "libx264")) {
+    if (g_str_has_prefix (GST_OBJECT_NAME (encoder_factory), "openh264")) {
       encoder_list = g_list_remove (encoder_list, l->data);
       encoder_list = g_list_prepend (encoder_list, encoder_factory);
       break;
