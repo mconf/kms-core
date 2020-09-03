@@ -2013,7 +2013,7 @@ kms_base_rtp_endpoint_rtpbin_new_jitterbuffer (GstElement * rtpbin,
   KmsRTPSessionStats *rtp_stats;
   KmsSSRCStats *ssrc_stats;
 
-  g_object_set (jitterbuffer,
+  g_object_set (jitterbuffer, "mode", 4 /* synced */ ,
       "latency", JB_INITIAL_LATENCY, "drop-on-latency", TRUE, NULL);
 
   switch (session) {
