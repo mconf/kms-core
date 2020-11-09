@@ -421,7 +421,7 @@ static void
 kms_agnostic_bin2_link_to_tee (KmsAgnosticBin2 * self, GstPad * pad,
     GstElement * tee, GstCaps * caps)
 {
-  GstElement *queue = kms_utils_element_factory_make ("queue", "agnosticbin_");
+  GstElement *queue = kms_utils_element_factory_make ("queue", "agnosticbin");
   GstPad *target;
   GstProxyPad *proxy;
 
@@ -1035,6 +1035,12 @@ kms_agnostic_bin2_sink_caps_probe (GstPad * pad, GstPadProbeInfo * info,
     kms_agnostic_bin2_configure_input (self, new_caps);
   }
 
+  // Monitor video gaps, to halt decoding when an intermediate frame is
+  // missing, and handle the keyframe requests.
+  if (kms_utils_caps_is_video (new_caps)) {
+    kms_utils_pad_monitor_gaps (self->priv->sink);
+  }
+
   return GST_PAD_PROBE_OK;
 }
 
@@ -1412,7 +1418,7 @@ check_ret_error (GstPad * pad, GstFlowReturn ret)
       GST_FIXME_OBJECT (pad, "REPLACE FAKESINK");
       GstElement *fakesink = self->priv->input_fakesink;
       kms_utils_bin_remove (GST_BIN (self), fakesink);
-      fakesink = kms_utils_element_factory_make ("fakesink", "agnosticbin_");
+      fakesink = kms_utils_element_factory_make ("fakesink", "agnosticbin");
       self->priv->input_fakesink = fakesink;
       g_object_set (fakesink, "async", FALSE, "sync", FALSE,
           "silent", FALSE,
@@ -1482,10 +1488,10 @@ kms_agnostic_bin2_init (KmsAgnosticBin2 * self)
 
   self->priv = KMS_AGNOSTIC_BIN2_GET_PRIVATE (self);
 
-  tee = kms_utils_element_factory_make ("tee", "agnosticbin_");
+  tee = kms_utils_element_factory_make ("tee", "agnosticbin");
   self->priv->input_tee = tee;
 
-  fakesink = kms_utils_element_factory_make ("fakesink", "agnosticbin_");
+  fakesink = kms_utils_element_factory_make ("fakesink", "agnosticbin");
   self->priv->input_fakesink = fakesink;
   g_object_set (fakesink, "async", FALSE, "sync", FALSE,
       "silent", FALSE, // FIXME used to print log in check_ret_error()
@@ -1501,7 +1507,6 @@ kms_agnostic_bin2_init (KmsAgnosticBin2 * self)
   gst_pad_set_chain_function (self->priv->sink, kms_agnostic_bin2_sink_chain);
   gst_pad_set_chain_list_function (self->priv->sink,
       kms_agnostic_bin2_sink_chain_list);
-  kms_utils_pad_monitor_gaps (self->priv->sink);
   g_object_unref (templ);
   g_object_unref (target);
 
