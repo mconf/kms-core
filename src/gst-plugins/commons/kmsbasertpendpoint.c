@@ -446,7 +446,7 @@ kms_base_rtp_endpoint_add_rtp_hdr_ext_probe (GstPad * pad,
   HdrExtData *data = (HdrExtData *) gp;
 
   if (GST_PAD_PROBE_INFO_TYPE (info) & GST_PAD_PROBE_TYPE_BUFFER) {
-    GstBuffer *buffer = GST_PAD_PROBE_INFO_BUFFER (info);
+    GstBuffer *buffer = gst_pad_probe_info_get_buffer (info);
 
     if (data->add_hdr) {
       buffer = gst_buffer_make_writable (buffer);
@@ -454,7 +454,7 @@ kms_base_rtp_endpoint_add_rtp_hdr_ext_probe (GstPad * pad,
     kms_base_rtp_endpoint_add_rtp_hdr_ext (data, buffer);
     GST_PAD_PROBE_INFO_DATA (info) = buffer;
   } else if (GST_PAD_PROBE_INFO_TYPE (info) & GST_PAD_PROBE_TYPE_BUFFER_LIST) {
-    GstBufferList *bufflist = GST_PAD_PROBE_INFO_BUFFER_LIST (info);
+    GstBufferList *bufflist = gst_pad_probe_info_get_buffer_list (info);
 
     if (data->add_hdr) {
       bufflist = gst_buffer_list_make_writable (bufflist);
@@ -1868,10 +1868,10 @@ kms_base_rtp_endpoint_rtpbin_request_pt_map (GstElement * rtpbin, guint session,
 
       st = gst_caps_get_structure (caps, 0);
       if (gst_structure_get_int (st, "clock-rate", &clock_rate)) {
-        kms_rtp_synchronizer_add_clock_rate_for_pt (sync, pt, clock_rate, NULL);
+        kms_rtp_synchronizer_set_pt_clock_rate (sync, pt, clock_rate, NULL);
       } else {
         GST_ERROR_OBJECT (self,
-            "Cannot get clockrate from caps: %" GST_PTR_FORMAT, caps);
+            "Cannot get clock rate from caps: %" GST_PTR_FORMAT, caps);
       }
     }
 
@@ -1980,7 +1980,7 @@ kms_base_rtp_endpoint_jitterbuffer_set_latency_probe (GstPad * pad,
   GstElement *jitterbuffer = GST_PAD_PARENT (pad);
   gint latency = GPOINTER_TO_INT (user_data);
 
-  GST_INFO_OBJECT (jitterbuffer, "Setting latency to: %d", latency);
+  GST_INFO_OBJECT (jitterbuffer, "Setting latency to %d ms", latency);
   g_object_set (jitterbuffer, "latency", latency, NULL);
 
   GST_INFO_OBJECT (jitterbuffer, "Jitterbuffer latency set; remove probe");
@@ -2013,7 +2013,7 @@ kms_base_rtp_endpoint_rtpbin_new_jitterbuffer (GstElement * rtpbin,
   KmsRTPSessionStats *rtp_stats;
   KmsSSRCStats *ssrc_stats;
 
-  g_object_set (jitterbuffer, "mode", 4 /* synced */ ,
+  g_object_set (jitterbuffer, "mode", 4 /* synced */, "do-lost", TRUE,
       "latency", JB_INITIAL_LATENCY, "drop-on-latency", TRUE, NULL);
 
   switch (session) {
@@ -2051,8 +2051,8 @@ kms_base_rtp_endpoint_rtpbin_new_jitterbuffer (GstElement * rtpbin,
   if (session == VIDEO_RTP_SESSION) {
     gboolean rtcp_nack = kms_base_rtp_endpoint_is_video_rtcp_nack (self);
 
-    g_object_set (jitterbuffer, "do-lost", TRUE,
-        "do-retransmission", rtcp_nack, "rtx-next-seqnum", FALSE, NULL);
+    g_object_set (jitterbuffer, "do-retransmission", rtcp_nack,
+        "rtx-next-seqnum", FALSE, NULL);
   }
 }
 
